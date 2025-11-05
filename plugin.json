@@ -1,0 +1,31 @@
+{
+  "name": "guideline-refresher",
+  "version": "1.0.0",
+  "description": "Claude Code skill that automatically refreshes coding guidelines based on codebase evolution, PR reviews, and approved patterns",
+  "author": "beamtempmacbookpro",
+  "repository": "https://github.com/beamtempmacbookpro/claude-skills",
+  "license": "MIT",
+  "skills": [
+    {
+      "name": "guideline-refresher",
+      "path": "skills/guideline-refresher",
+      "description": "Analyzes git history, PR reviews, and file patterns to generate evidence-based coding guidelines for specific areas of your codebase",
+      "triggers": [
+        "refresh guidelines",
+        "update guidelines",
+        "analyze code patterns",
+        "coding guidelines"
+      ],
+      "version": "1.0.0"
+    }
+  ],
+  "requirements": {
+    "python": ">=3.7",
+    "git": "required",
+    "gh": "optional (required for PR analysis)"
+  },
+  "installation": {
+    "instructions": "Copy the skills/guideline-refresher directory to ~/.claude/skills/ or use as a Claude Code plugin",
+    "verify": "python3 skills/guideline-refresher/refresh_guidelines.py --help"
+  }
+}

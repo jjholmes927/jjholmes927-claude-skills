@@ -1,0 +1,59 @@
+{
+  "skill_name": "guideline-refresher",
+  "version": "1.0.0",
+  "description": "Automatically refreshes coding guidelines based on codebase evolution",
+  "triggers": [
+    "refresh-guidelines",
+    "update-guidelines",
+    "analyze-code-patterns"
+  ],
+  "data_sources": {
+    "git_history": true,
+    "pr_reviews": true,
+    "file_patterns": true
+  },
+  "analysis_depth": {
+    "quick": {
+      "pr_limit": 20,
+      "commit_days": 30,
+      "min_pattern_frequency": 3,
+      "description": "Fast scan of recent changes (last month)"
+    },
+    "standard": {
+      "pr_limit": 50,
+      "commit_days": 90,
+      "min_pattern_frequency": 5,
+      "description": "Balanced analysis (last quarter)"
+    },
+    "deep": {
+      "pr_limit": 100,
+      "commit_days": 180,
+      "min_pattern_frequency": 3,
+      "description": "Comprehensive review (last 6 months)"
+    }
+  },
+  "output_format": {
+    "guidelines_file": ".claude/guidelines/{area}.md",
+    "report_file": ".claude/reports/guideline-refresh-{date}.md",
+    "backup_previous": true
+  },
+  "review_themes": {
+    "code_organization": ["structure", "organize", "directory", "folder", "separate", "split"],
+    "type_safety": ["type", "typescript", "interface", "any", "unknown"],
+    "testing": ["test", "coverage", "jest", "spec", "unit test", "integration test"],
+    "performance": ["performance", "optimize", "slow", "cache", "memo", "lazy"],
+    "error_handling": ["error", "exception", "catch", "try", "throw"],
+    "naming": ["naming", "rename", "name is", "called", "variable name"],
+    "documentation": ["document", "comment", "readme", "docs", "jsdoc"],
+    "accessibility": ["accessibility", "a11y", "aria", "screen reader"],
+    "security": ["security", "sanitize", "xss", "csrf", "injection", "auth"]
+  },
+  "technology_keywords": {
+    "typescript": ["typescript", "ts", ".tsx"],
+    "react": ["react", "jsx", "hook", "component"],
+    "vue": ["vue", "composition", "vue3"],
+    "testing": ["test", "spec", "jest", "vitest", "cypress"],
+    "async": ["async", "await", "promise"],
+    "performance": ["performance", "optimize", "lazy", "memo"]
+  }
+}
