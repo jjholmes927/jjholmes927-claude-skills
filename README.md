@@ -1,10 +1,21 @@
 # Claude Skills
 
-A collection of Claude Code skills to enhance your development workflow.
+A collection of Claude Code commands and skills to enhance your development workflow, packaged as the `joel-workflow` plugin.
 
 ## Marketplace Overview
 
-This repository contains professionally-crafted Claude Code skills that automate common development tasks. Each skill is designed to integrate seamlessly with Claude Code and can be installed via the marketplace or manually.
+This repository is a Claude Code plugin marketplace containing one plugin, `joel-workflow`: workflow slash commands plus skills that automate common development tasks.
+
+## Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `/ship` | End-to-end ship workflow: format, commit, push, PR, CI watch, review consolidation |
+| `/review-pr` | Structured multi-pass pull request review |
+| `/verify-ui` | Verify a UI flow in a real browser via agent-browser (localhost or staging) |
+| `/pick-up-linear-ticket` | Claim a Linear ticket and set up a branch to start implementation |
+| `/brag-doc` | Generate weekly brag doc entries from GitHub activity |
+| `/skill-reviewer` | Review a Claude Code skill for structural and domain quality |
 
 ## Available Skills
 
@@ -32,10 +43,7 @@ Auto-refresh coding guidelines based on codebase patterns, PR reviews, and appro
 /plugin marketplace add jjholmes927/jjholmes927-claude-skills
 
 # Install plugin
-/plugin install
-
-# Select: jjholmes927-claude-skills
-# Choose skills to install
+/plugin install joel-workflow@jjholmes927-claude-skills
 ```
 
 ### Manual Installation

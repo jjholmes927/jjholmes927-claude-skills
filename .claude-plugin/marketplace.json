@@ -3,13 +3,13 @@
   "owner": {
     "name": "jjholmes927"
   },
-  "description": "Auto-refresh coding guidelines based on codebase patterns, PR reviews, and approved code",
-  "version": "1.0.0",
+  "description": "Joel's personal Claude Code plugin marketplace",
+  "version": "2.0.0",
   "plugins": [
     {
-      "name": "guideline-refresher",
-      "description": "Auto-refresh coding guidelines based on codebase patterns, PR reviews, and approved code",
-      "version": "1.0.0",
+      "name": "joel-workflow",
+      "description": "Personal workflow commands (ship, review-pr, verify-ui, pick-up-linear-ticket, brag-doc, skill-reviewer) and skills (guideline-refresher)",
+      "version": "2.0.0",
       "source": {
         "source": "github",
         "repo": "jjholmes927/jjholmes927-claude-skills"

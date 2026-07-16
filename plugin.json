@@ -1,7 +1,7 @@
 {
-  "name": "jjholmes927-claude-skills",
-  "version": "1.0.0",
-  "description": "Containing my personal Claude Code skills for use in my personal and professionalprojects.",
+  "name": "joel-workflow",
+  "version": "2.0.0",
+  "description": "Joel's personal Claude Code workflow toolbox: ship, review-pr, verify-ui, pick-up-linear-ticket, brag-doc, skill-reviewer commands plus skills.",
   "author": {
     "name": "jjholmes927",
     "url": "https://github.com/jjholmes927"
