@@ -18,8 +18,10 @@ cat > "$TMP/bin/codex" <<'SHIM'
 echo "$@" >> "${CODEX_SHIM_ARGS}"
 if [[ "${CODEX_SHIM_EXIT:-0}" != "0" ]]; then exit "${CODEX_SHIM_EXIT}"; fi
 if [[ "$1" == "exec" && "$2" != "review" ]]; then
-  echo '{"type":"thread.started","thread_id":"aaaa-1111-bbbb-2222"}'
-  echo '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
+  if [[ -z "${CODEX_SHIM_NO_THREAD:-}" ]]; then
+    echo '{"type":"thread.started","thread_id":"aaaa-1111-bbbb-2222"}'
+    echo '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
+  fi
 elif [[ "$2" == "review" ]]; then
   echo "REVIEW: 1 finding — example"
 fi
@@ -35,7 +37,9 @@ PROMPT="$TMP/prompt.txt"; echo "do the thing" > "$PROMPT"
 out=$("$SUT" run "$TMP/work" high "$PROMPT")
 assert "run prints thread id" "aaaa-1111-bbbb-2222" "$out"
 args=$(cat "$CODEX_SHIM_ARGS")
-case "$args" in *"--full-auto"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: run passes --full-auto";; esac
+case "$args" in *"--sandbox workspace-write"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: run passes --sandbox workspace-write";; esac
+case "$args" in *"approval_policy=never"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: run passes approval_policy=never";; esac
+case "$args" in *"sandbox_workspace_write.network_access=true"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: run passes network_access=true";; esac
 case "$args" in *"model_reasoning_effort=high"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: run passes effort";; esac
 case "$args" in *"-C $TMP/work"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: run passes -C workdir";; esac
 
@@ -53,6 +57,11 @@ case "$args" in *"--commit deadbeef"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); e
 
 CODEX_SHIM_EXIT=3 "$SUT" run "$TMP/work" low "$PROMPT" >/dev/null 2>&1
 assert "run propagates codex exit code" "3" "$?"
+
+nothread_out=$(CODEX_SHIM_NO_THREAD=1 "$SUT" run "$TMP/work" low "$PROMPT" 2>/dev/null)
+nothread_rc=$?
+assert "run exits 1 when no thread.started" "1" "$nothread_rc"
+assert "run prints nothing when no thread.started" "" "$nothread_out"
 
 echo "---"
 echo "pass=$PASS fail=$FAIL"
