@@ -36,12 +36,13 @@ case "$cmd" in
     workdir=$1 session=$2 effort=$3 prompt=$4
     mkdir -p "$workdir/.e2e"
     log=$(mktemp "$workdir/.e2e/codex-XXXXXX"); mv "$log" "$log.jsonl"; log="$log.jsonl"
-    codex exec resume "$session" --sandbox workspace-write -c approval_policy=never --json -C "$workdir" \
+    (cd "$workdir" && codex exec resume "$session" -c sandbox_mode="workspace-write" -c approval_policy=never --json \
       -c sandbox_workspace_write.network_access=true \
       -c model_reasoning_effort="$effort" \
       -o "$workdir/.e2e/last-message.txt" \
-      - < "$prompt" > "$log"
+      - < "$prompt" > "$log")
     rc=$?
+    [[ -s "$log" ]] || rc=1
     printf '%s\n' "$session"
     exit "$rc"
     ;;
