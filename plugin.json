@@ -1,6 +1,6 @@
 {
   "name": "joel-workflow",
-  "version": "2.1.2",
+  "version": "2.2.0",
   "description": "Joel's personal Claude Code workflow toolbox: ship, review-pr, verify-ui, pick-up-linear-ticket, brag-doc, skill-reviewer commands plus skills (guideline-refresher, e2e).",
   "author": {
     "name": "jjholmes927",
