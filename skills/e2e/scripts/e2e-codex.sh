@@ -5,6 +5,7 @@ usage() {
   echo "usage: e2e-codex.sh run <workdir> <effort> <prompt-file>" >&2
   echo "       e2e-codex.sh resume <workdir> <session-id> <effort> <prompt-file>" >&2
   echo "       e2e-codex.sh review <workdir> [codex-review-args...]" >&2
+  echo "       e2e-codex.sh audit <workdir> <prompt-file>" >&2
   exit 2
 }
 
@@ -48,6 +49,13 @@ case "$cmd" in
     [[ $# -ge 1 ]] || usage
     workdir=$1; shift
     (cd "$workdir" && codex exec review "$@")
+    ;;
+  audit)
+    [[ $# -eq 2 ]] || usage
+    workdir=$1 prompt=$2
+    codex exec --sandbox read-only -c approval_policy=never -C "$workdir" \
+      -c model_reasoning_effort=high \
+      - < "$prompt"
     ;;
   *) usage ;;
 esac

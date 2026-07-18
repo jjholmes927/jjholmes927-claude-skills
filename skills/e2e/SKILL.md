@@ -6,7 +6,7 @@ description: "Use when the user says /e2e, 'take this end to end', 'run the e2e 
 # e2e — Fable plans, Sol implements, both review
 
 Wrapper script: `${CLAUDE_PLUGIN_ROOT}/skills/e2e/scripts/e2e-codex.sh`
-(`run <workdir> <effort> <prompt-file>` → prints codex thread id; `resume <workdir> <thread-id> <effort> <prompt-file>`; `review <workdir> [--commit <sha>|--base <branch>|--uncommitted]`)
+(`run <workdir> <effort> <prompt-file>` → prints codex thread id; `resume <workdir> <thread-id> <effort> <prompt-file>`; `review <workdir> [--commit <sha>|--base <branch>|--uncommitted]`; `audit <workdir> <prompt-file>` → read-only sandbox, prints Sol's verdict)
 
 ## Iron Laws
 
@@ -20,7 +20,7 @@ Violating the letter of a law is violating the law — there is no spirit-of-the
 
 - **Writing code yourself** → STOP, route it through `e2e-codex.sh` to Sol.
 - **Adding a confirmation stop after plan approval** → STOP, proceed; the plan gate was the only gate.
-- **Running a third loop iteration** → STOP, hard-stop and carry findings to PR comments.
+- **Running a loop past its cap** (implement: 1 retry; Fable fix loop: 3; CI fix: 2; plan audit: 2) → STOP, hard-stop and carry findings to PR comments.
 - **Deleting/recreating the worktree after failure** → STOP, leave it and report its path.
 - **Shipping with unresolved findings** → STOP, post each as a `[e2e unresolved]` PR comment first.
 
@@ -59,7 +59,8 @@ codex CLI (authenticated), gh CLI, superpowers plugin, this plugin's ship + pick
    | Routine feature code, clear pattern to follow | medium |
    | Cross-cutting or multi-file integration | high |
    | Algorithmic, subtle correctness, or tricky domain logic | xhigh |
-4. Present the plan and WAIT for explicit user approval. This is the gate.
+4. Sol plan audit (cross-model, before the human sees the plan): write the plan plus "Audit this plan for correctness, security, and completeness against the repo. Verdict: READY, or REVISE with concrete issues." to a temp file; run `e2e-codex.sh audit <repo-root> <file>` (read-only sandbox — safe on the main checkout). On REVISE, fix the issues and re-audit. Max 2 audit rounds; if still REVISE, present the plan with the unresolved audit notes attached.
+5. Present the plan (with Sol's verdict) and WAIT for explicit user approval. This is the gate.
 
 ## Stage 2 — Workspace
 
@@ -82,12 +83,12 @@ For each plan task, in order:
 1. `e2e-codex.sh review <worktree> --commit <task-sha>` → capture output.
 2. If it reports findings: write them to `.e2e/task-N-selffix.md` with "Fix these findings from your own review", then `e2e-codex.sh resume <worktree> <thread-id> <effort> .e2e/task-N-selffix.md`, and amend: `git -C <worktree> add -A && git -C <worktree> commit --amend --no-edit`. Amending rewrites the sha: re-capture it with `git -C <worktree> rev-parse HEAD` and use that fresh sha for all later reviews; never reuse a pre-amend sha. One self-review pass only.
 
-## Stage 5 — Fable review + fix loop (**per-task Fable fix loop: 2 max**)
+## Stage 5 — Fable review + fix loop (**per-task Fable fix loop: 3 max**)
 
-1. Dispatch a code-reviewer subagent (superpowers:requesting-code-review conventions) on `git -C <worktree> show <task-sha>` with the plan task as context. Findings must be concrete: file, line, defect, why it matters.
-2. Arbitrate: discard nits and false positives yourself; keep real defects.
+1. Dispatch a code-reviewer subagent (superpowers:requesting-code-review conventions) on `git -C <worktree> show <task-sha>` with the plan task as context, instructed to try to REFUTE its own findings before reporting — only findings that survive refutation are returned. Findings must be concrete: file, line, defect, why it matters.
+2. Arbitrate and label each surviving finding by agreement: `[both]` (Sol's Stage 4 self-review also flagged it), `[claude-only]`, or `[codex-only]` (from Stage 4 but unfixed). Drop refuted findings and nits; keep real defects — `[both]` findings are highest-confidence, never drop them without re-verification.
 3. If real defects remain: write them to `.e2e/task-N-fix-<loop>.md` as a fix brief, `e2e-codex.sh resume` with the task's effort, amend the checkpoint commit, then re-capture the sha with `git -C <worktree> rev-parse HEAD` and use that fresh sha for all later reviews (never reuse a pre-amend sha), and re-verify each finding yourself (read the diff — do not re-run the full review). Record each loop's status in `.e2e/sessions.tsv` — count loops from the file, never from memory.
-4. After 2 loops, carry unresolved findings forward to Stage 7's PR-comment list.
+4. After 3 loops, carry unresolved findings forward to Stage 7's PR-comment list, keeping their agreement labels.
 
 ## Stage 6 — Final branch review (Fable)
 
