@@ -55,6 +55,13 @@ case "$out" in *"REVIEW: 1 finding"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); ec
 args=$(cat "$CODEX_SHIM_ARGS")
 case "$args" in *"--commit deadbeef"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: review forwards scope args";; esac
 
+: > "$CODEX_SHIM_ARGS"
+out=$("$SUT" audit "$TMP/work" "$PROMPT")
+args=$(cat "$CODEX_SHIM_ARGS")
+case "$args" in *"--sandbox read-only"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: audit passes --sandbox read-only";; esac
+case "$args" in *"-C $TMP/work"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: audit passes -C workdir";; esac
+case "$args" in *"model_reasoning_effort=high"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: audit pins high effort";; esac
+
 CODEX_SHIM_EXIT=3 "$SUT" run "$TMP/work" low "$PROMPT" >/dev/null 2>&1
 assert "run propagates codex exit code" "3" "$?"
 
