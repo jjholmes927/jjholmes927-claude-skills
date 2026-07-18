@@ -73,7 +73,7 @@ Invoke superpowers:using-git-worktrees. Branch: `jjholmes927-<slug>[-TICKET]`. R
 
 For each plan task, in order:
 
-1. Write the task prompt to `.e2e/task-N-prompt.md` containing: the plan task verbatim; relevant constraints from neighbouring tasks; "Read AGENTS.md (or CLAUDE.md if no AGENTS.md) in the repo root and follow its conventions"; "Run the project's tests for the code you changed and make them pass before finishing"; "Do not commit".
+1. Write the task prompt to `.e2e/task-N-prompt.md` containing: the plan task verbatim; relevant constraints from neighbouring tasks; "Read AGENTS.md (or CLAUDE.md if no AGENTS.md) in the repo root and follow its conventions"; "HARD RULE — NEVER add code comments: no explanatory, doc, or rationale comments, not even for non-obvious workarounds. Only exceptions: machine-required directives (rubocop:disable, eslint-disable, frozen_string_literal, shebangs) and updating an EXISTING comment your change makes factually stale. If something needs explaining, say it in your final message instead."; "Run the project's tests for the code you changed and make them pass before finishing"; "Do not commit".
 2. Run: `e2e-codex.sh run <worktree> <effort> .e2e/task-N-prompt.md` → capture thread id.
 3. Append `task-N<TAB><thread-id><TAB><effort><TAB>implemented` to `.e2e/sessions.tsv`. Track every attempt's status by updating this file — never count retries from memory.
 4. Failure policy (**implement: 1 retry then stop**): non-zero exit or no diff (`git -C <worktree> status --porcelain` empty) → retry ONCE with the error/`.e2e/last-message.txt` tail appended to the prompt, recording the retry in `.e2e/sessions.tsv`. Second failure → hard-stop per the Iron Laws.
