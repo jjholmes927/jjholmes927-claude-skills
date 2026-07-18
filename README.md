@@ -34,6 +34,10 @@ Auto-refresh coding guidelines based on codebase patterns, PR reviews, and appro
 - 📖 [Full Documentation](skills/guideline-refresher/README.md)
 - 🚀 [Usage Examples](EXAMPLES.md)
 
+### 🚢 [E2E](skills/e2e/)
+
+Full delivery pipeline: Claude/Fable plans with one approval gate, codex/Sol implements each task headlessly with graded reasoning effort, dual review with fix loops, then ship to PR with CI watch.
+
 ## Installation
 
 ### From Marketplace (Recommended)
