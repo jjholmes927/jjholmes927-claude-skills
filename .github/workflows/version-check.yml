@@ -1,0 +1,57 @@
+name: Version check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  versions-in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON parses
+        run: |
+          jq empty plugin.json
+          jq empty .claude-plugin/marketplace.json
+
+      - name: plugin.json and marketplace.json versions match
+        run: |
+          PLUGIN=$(jq -r '.version' plugin.json)
+          MARKETPLACE=$(jq -r '.version' .claude-plugin/marketplace.json)
+          ENTRY=$(jq -r '.plugins[] | select(.name == "joel-workflow") | .version' .claude-plugin/marketplace.json)
+          echo "plugin.json:                    $PLUGIN"
+          echo "marketplace.json (top-level):   $MARKETPLACE"
+          echo "marketplace.json (plugin entry): $ENTRY"
+          if [ "$PLUGIN" != "$MARKETPLACE" ] || [ "$PLUGIN" != "$ENTRY" ]; then
+            echo "::error::Version mismatch — bump all three to the same value (plugin.json .version, marketplace.json .version, marketplace.json plugin entry .version)"
+            exit 1
+          fi
+
+  version-bumped-on-content-change:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require a version bump when plugin content changes
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only "$BASE"...HEAD -- skills commands install.sh plugin.json .claude-plugin/marketplace.json)
+          if [ -z "$CHANGED" ]; then
+            echo "No plugin content changed — version bump not required."
+            exit 0
+          fi
+          echo "Changed plugin content:"
+          echo "$CHANGED"
+          OLD=$(git show "$BASE":plugin.json | jq -r '.version')
+          NEW=$(jq -r '.version' plugin.json)
+          echo "Base version: $OLD — PR version: $NEW"
+          if [ "$OLD" = "$NEW" ]; then
+            echo "::error::Plugin content changed but version was not bumped (still $NEW). Bump plugin.json and both marketplace.json version fields."
+            exit 1
+          fi
