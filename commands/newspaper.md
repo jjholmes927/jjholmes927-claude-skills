@@ -12,6 +12,7 @@ Written updates land better when the key point isn't buried. Take the draft from
 **Detail (optional)** — ≤5 bullets, framed as "detail in thread 🧵" — include only what someone would act on.
 
 Rules:
+- **Edit what's there — never add content the draft didn't contain** (no new asks, caveats, or coaching). If something seems missing, note it in ONE line after the draft; don't write it in.
 - The reader must get the complete answer from headline + impact alone.
 - Cut entirely: how the problem was found, alternatives not taken, hedging. One load-bearing caveat max, one clause long.
 - Any question for the reader goes in the first two lines, never the end.
