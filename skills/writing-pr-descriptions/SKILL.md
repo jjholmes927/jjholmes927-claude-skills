@@ -31,6 +31,10 @@ Steps to reproduce (bug fixes) · deploy notes · deferred follow-ups · verific
 - **Never add Claude/AI attribution.**
 - Whole body ≤ ~10 lines, before any bot-appended content.
 
+## Voice
+
+Write it in Joel's register: [PR & Review Style Guide](https://claude.ai/code/artifact/f4e3dca0-6a0d-4a63-960c-3e7a93b92ff0) — plain-language framing, quantified Why, scope fencing ("Not in scope: …"), no emoji in description prose. **Precedence: the caps above win.** The guide was mined from pre-experiment PRs (Jul 2026) and describes Whys that "invest the most words" with long multi-clause sentences — keep the voice, not the length.
+
 ## Example (a real one that works)
 
 ```markdown
