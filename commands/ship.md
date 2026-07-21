@@ -150,12 +150,7 @@ If no PR exists yet, create one with `gh pr create`.
 
 ### Writing the body
 
-Keep it terse and outcome-focused. Aim for ~5–10 lines total. Long bullet inventories duplicate the diff and bury the actual story.
-
-- **What** — 1–2 sentences describing the user-visible capability change in plain language. Don't list function names, constants, or "wired into X" — the diff covers that.
-- **Why** — motivation in real-world terms. Include real numbers when you have them (latency, cost, error rate, sample sizes). Link supporting reports/dashboards inline if useful — the ticket itself is already covered by the title bracket.
-- **No "Fixes TICKET-ID" footer.** Linear auto-attaches via the ticket bracket in the PR title (e.g. `[INT-350]`). Linking the ticket inline in the Why section is fine if it adds context.
-- For bug fixes, add a **Steps to Reproduce** section.
+Invoke the **`writing-pr-descriptions`** skill and follow it exactly — it owns the format (What / Why / Worth-noting), the 3-bullet / 2–3-sentence section caps, and the hard rules (one idea per sentence, outcome not inventory, stack etiquette, no Fixes footer, no attribution).
 
 ### Creating the PR
 
@@ -165,19 +160,6 @@ Write the body to a temp file (Write tool or an editor) and pass it with `--body
 gh pr create --title "feat: Title here [TICKET-ID]" --body-file /tmp/pr-body.md
 PR_NUMBER=$(gh pr view --json number -q .number)
 ```
-
-### Counter-example (too verbose — avoid)
-
-Don't write a bullet for every code change like this:
-```
-**What**
-- Add `Foo::Bar.baz(x:, y:)` that does X
-- Wire it into `Some::Service#do_thing`
-- Add `THING_CONSTANT` with the values from the report
-- Update `Some::Service` to use the new constant
-- Add 3 OTel span attributes: `foo.bar`, `foo.baz`, ...
-```
-This is just a worse version of the diff. The reviewer can see the diff. Tell them what *outcome* the changes produce.
 
 ## Step 7: Watch CI (fail fast)
 

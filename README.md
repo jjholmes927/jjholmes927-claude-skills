@@ -42,6 +42,10 @@ Full delivery pipeline: Claude/Fable plans with one approval gate, codex/Sol imp
 
 Pulls codex/Sol in as a read-only second pair of eyes on whatever workflow is running: cross-model review, corroboration of a conclusion, or a blind second opinion on a design — with graded reasoning effort and honest disagreement reporting.
 
+### ✍️ [Writing PR Descriptions](skills/writing-pr-descriptions/)
+
+PR bodies a reviewer absorbs in 30 seconds: What / Why / Worth-noting with 3-bullet section caps, one idea per sentence, outcome-not-inventory, stack etiquette. Owns the body format for `/ship` and works standalone to draft or tighten any PR description.
+
 ## Installation
 
 ### From Marketplace (Recommended)
