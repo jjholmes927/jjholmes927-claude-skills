@@ -61,8 +61,9 @@ codex CLI (authenticated), gh CLI, superpowers plugin, this plugin's ship + pick
    | Algorithmic, subtle correctness, or tricky domain logic | xhigh |
 4. Sol plan audit (cross-model, before the human sees the plan): write the plan plus "Audit this plan for correctness, security, and completeness against the repo. Verdict: READY, or REVISE with concrete issues." to a temp file; run `e2e-codex.sh audit <repo-root> <file>` (read-only sandbox — safe on the main checkout). On REVISE, fix the issues and re-audit. Max 2 audit rounds; if still REVISE, present the plan with the unresolved audit notes attached.
 5. Present the plan at the gate:
-   - Publish a plan-review Artifact rendered FROM the plan file (load the `artifact-design` skill first). Decisions-first layout: TL;DR stats (tasks, effort grades, migrations, test counts), a small UI mockup when the change is user-facing, the locked decisions, one card per task (files, effort grade, tests), the full Sol audit trail (each round's verdict and what was fixed, unresolved notes flagged), and an on-approve pipeline strip. The plan `.md` stays canonical — the artifact is a rendering; regenerate it from the file after any plan change, never edit it independently.
-   - Send the artifact URL plus the raw plan path, then ONE Approve/Revise question (AskUserQuestion). Invite task-anchored notes ("T2: …") via the Other option.
+   - If the plan touches anything user-facing (UI, copy, notifications end users see), has 3+ tasks, or has any task graded high/xhigh: publish a plan-review Artifact rendered FROM the plan file (load the `artifact-design` skill first). Decisions-first layout: TL;DR stats (tasks, effort grades, migrations, test counts), a small UI mockup when the change is user-facing, the locked decisions, one card per task (files, effort grade, tests), the full Sol audit trail (each round's verdict and what was fixed, unresolved notes flagged), and an on-approve pipeline strip. The plan `.md` stays canonical — the artifact is a rendering; regenerate it from the file after any plan change, never edit it independently.
+   - If none of those hold (small, internal-only plan): no artifact. The gate message is a short chat summary — TL;DR stats, locked decisions, audit trail one-liners — plus the raw plan path.
+   - Send the artifact URL (when one was published) plus the raw plan path, then ONE Approve/Revise question (AskUserQuestion). Invite task-anchored notes ("T2: …") via the Other option.
    - WAIT for explicit approval. This is the gate — do not start Stage 2 without it, and do not add further approval stops after it.
 
 ## Stage 2 — Workspace
@@ -99,7 +100,7 @@ Whole-branch check against the approved plan: every task present, no plan drift,
 
 ## Stage 7 — Ship
 
-1. Commit the approved plan file into the branch first (`git add -f docs/plans/<plan>.md` — plans dirs are commonly gitignored) so the PR carries plan + implementation together. Then invoke the ship command from this plugin inside the worktree. Let it format, commit leftovers, push, open the PR (What/Why), and watch CI.
+1. The plan file never enters the branch — docs/plans/ is a local working document; the PR carries implementation only. Invoke the ship command from this plugin inside the worktree. Let it format, commit leftovers, push, open the PR (What/Why), and watch CI. Before ship commits leftovers, confirm `git status` shows no plan file staged (it should be gitignored; if not, leave it untracked).
 2. Post each carried-forward finding as a PR comment: `gh pr comment <num> --body "..."` prefixed with `[e2e unresolved]`.
 3. CI failures (**CI fix: 2 max**): hand the failure log to `e2e-codex.sh resume` (effort `high`, most relevant task session), push, re-watch. Record each round in `.e2e/sessions.tsv` and count from the file, never from memory. After 2 rounds, hard-stop and report.
 4. Report: PR URL, tasks completed, fix-loop counts, unresolved findings, total codex sessions.
