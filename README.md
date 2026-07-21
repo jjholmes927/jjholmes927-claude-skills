@@ -44,7 +44,7 @@ Pulls codex/Sol in as a read-only second pair of eyes on whatever workflow is ru
 
 ### ✍️ [Writing PR Descriptions](skills/writing-pr-descriptions/)
 
-PR bodies a reviewer absorbs in 30 seconds: What / Why / Worth-noting with 3-bullet section caps, one idea per sentence, outcome-not-inventory, stack etiquette. Owns the body format for `/ship` and works standalone to draft or tighten any PR description.
+PR bodies a reviewer absorbs in 30 seconds: What / Why / Worth-noting with 3-bullet section caps, one idea per sentence, outcome-not-inventory, stack etiquette. Ships with [VOICE.md](skills/writing-pr-descriptions/VOICE.md) — Joel's mined tone-of-voice guide (guidelines; SKILL.md rules always win). Owns the body format for `/ship` and works standalone to draft or tighten any PR description.
 
 ## Installation
 

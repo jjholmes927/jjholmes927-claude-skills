@@ -31,9 +31,11 @@ Steps to reproduce (bug fixes) · deploy notes · deferred follow-ups · verific
 - **Never add Claude/AI attribution.**
 - Whole body ≤ ~10 lines, before any bot-appended content.
 
-## Voice
+## Voice — guidelines, not rules
 
-Write it in Joel's register: [PR & Review Style Guide](https://claude.ai/code/artifact/f4e3dca0-6a0d-4a63-960c-3e7a93b92ff0) — plain-language framing, quantified Why, scope fencing ("Not in scope: …"), no emoji in description prose. **Precedence: the caps above win.** The guide was mined from pre-experiment PRs (Jul 2026) and describes Whys that "invest the most words" with long multi-clause sentences — keep the voice, not the length.
+This file is the **rules — no exceptions**. How it *sounds* is [VOICE.md](VOICE.md) in this directory — Joel's tone-of-voice guide, mined from ~100 of his PRs and ~111 review threads: plain-language framing, quantified Why, scope fencing ("Not in scope: …"), no emoji in description prose. Read it when drafting; it makes the body sound like Joel rather than a bot.
+
+**Precedence: this file always wins.** VOICE.md predates the Jul 2026 succinctness experiment and describes Whys that "invest the most words" — the conflicting observations are marked ⚠️ superseded in place. Keep the voice, take the length from here.
 
 ## Example (a real one that works)
 
