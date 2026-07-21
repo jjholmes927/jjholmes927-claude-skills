@@ -38,6 +38,10 @@ Auto-refresh coding guidelines based on codebase patterns, PR reviews, and appro
 
 Full delivery pipeline: Claude/Fable plans with one approval gate, codex/Sol implements each task headlessly with graded reasoning effort, dual review with fix loops, then ship to PR with CI watch.
 
+### 👀 [Codex Collab](skills/codex-collab/)
+
+Pulls codex/Sol in as a read-only second pair of eyes on whatever workflow is running: cross-model review, corroboration of a conclusion, or a blind second opinion on a design — with graded reasoning effort and honest disagreement reporting.
+
 ## Installation
 
 ### From Marketplace (Recommended)
