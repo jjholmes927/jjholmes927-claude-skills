@@ -16,6 +16,7 @@ This repository is a Claude Code plugin marketplace containing one plugin, `joel
 | `/pick-up-linear-ticket` | Claim a Linear ticket and set up a branch to start implementation |
 | `/brag-doc` | Generate weekly brag doc entries from GitHub activity |
 | `/skill-reviewer` | Review a Claude Code skill for structural and domain quality |
+| `/newspaper` | Rewrite a draft into the newspaper model: headline, impact, detail-on-request |
 
 ## Available Skills
 
