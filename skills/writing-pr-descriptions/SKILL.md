@@ -16,8 +16,6 @@ Max 3 bullets or 2–3 short sentences: the user-visible capability change, in p
 **Why**
 Max 3 bullets or 2–3 short sentences: motivation in real-world terms, with real numbers when you have them (latency, cost, error rate, sample sizes).
 
-**Worth noting** (optional — only when there is something)
-Steps to reproduce (bug fixes) · deploy notes · deferred follow-ups · verification evidence.
 ```
 
 ## Hard rules
@@ -27,7 +25,7 @@ Steps to reproduce (bug fixes) · deploy notes · deferred follow-ups · verific
 - **Outcome, not inventory.** Don't list function names, constants, or "wired X into Y" — the diff covers that. Say what the change *causes*.
 - **Stacked PRs**: one line at the top — position and where the big picture lives ("2/3, stacked on #8656 — context in #8562"). The story is told once, in the first PR, not repeated per layer.
 - **No "Fixes TICKET-ID" footer.** The ticket goes in the title bracket (`[INT-350]`) — Linear attaches via the title. Linking it inline in Why is fine when it adds context.
-- **Bug fixes** get Steps to Reproduce in the Worth-noting section.
+- **Bug fixes**: a one-line repro goes in Why.
 - **Never add Claude/AI attribution.**
 - Whole body ≤ ~10 lines, before any bot-appended content.
 
