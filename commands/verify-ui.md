@@ -93,8 +93,8 @@ SESSION_NAME="$(basename "$REPO")-staging"
    Accept 200 or 302 as healthy. Retry up to 3 times with 10s gap (cold start). If still unhealthy, report and stop.
 
 **If no arguments provided:**
-1. Resolve this clone's dev-server port from `.env.local` (each parallel-dev clone sets its own; defaults to `3000` if unset), then health-check it: `PORT=$(grep -E '^PORT=' .env.local | cut -d= -f2); PORT=${PORT:-3000}; curl -s -o /dev/null -w "%{http_code}" "http://localhost:${PORT}"`
-   - If 200 → use `http://localhost:${PORT}` as target
+1. Read the repository's runtime guide and resolve this checkout's URL with `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-dev-url.py"`. It uses `bin/dev-info`'s `APP_URL` when available, then checkout `.env` and `.env.local` values. It never guesses port 3000 or executes environment-file contents. For a different project contract, use its resolver explicitly. On resolution failure, report the missing environment information rather than testing another checkout.
+   - Health-check the resolved URL; if 200 or an expected authentication redirect, use it as the target. Record the checkout and URL with the evidence.
 2. If localhost not running, check for PR on current branch:
    ```bash
    gh pr view --json number --jq '.number' 2>/dev/null
@@ -234,7 +234,7 @@ agent-browser close
 ## Authentication
 
 ### Localhost
-No auth required — the dev server runs unauthenticated locally.
+Use the repository's documented development login. Do not assume localhost is unauthenticated. If required credentials are unavailable, report the unverified promise explicitly.
 
 ### Staging (any non-localhost target)
 
@@ -292,7 +292,7 @@ This summary lets the developer async-review what was validated without being bl
 
 If this verification is for a change that has (or is about to have) a PR, the key screenshots belong **in the PR body** — chat evidence disappears; the PR is what reviewers and future readers see. This is not optional for visual changes (INT-738/INT-742, Aug 2026: three UI PRs merged with no screenshots; the evidence existed but only ever appeared in chat).
 
-Private repos can't hot-link user-attachment URLs from CLI-created bodies. Use the screenshots-branch recipe:
+Follow the repository's PR attachment policy first. If it forbids committing screenshots, use its documented upload method and preserve the evidence for a human upload when necessary. Only when the repository permits a screenshots branch, use this recipe in a separate worktree so verification does not switch the implementation checkout:
 
 ```bash
 git checkout -b <user>-<TICKET>-screenshots origin/main   # or reuse the existing screenshots branch
