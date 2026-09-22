@@ -1,124 +1,89 @@
 ---
 name: e2e
-description: "Use when the user says /e2e, 'take this end to end', 'run the e2e flow', or gives a ticket/prompt to fully implement hands-off. Runs the plan→approve-once→implement→review→ship pipeline where Fable plans, Sol (codex) writes all code headlessly, and both review."
+description: "Use when the user says /e2e, 'take this end to end', 'run the e2e flow', or asks for an approved plan-to-PR implementation. Coordinates planning, implementation, review, verification and shipping through the selected harness and execution profile."
 ---
 
-# e2e — Fable plans, Sol implements, both review
+# E2E — plan, approve, implement, review and ship
 
-Wrapper script: `${CLAUDE_PLUGIN_ROOT}/skills/e2e/scripts/e2e-codex.sh`
-(`run <workdir> <effort> <prompt-file>` → prints codex thread id; `resume <workdir> <thread-id> <effort> <prompt-file>`; `review <workdir> [--commit <sha>|--base <branch>|--uncommitted]`; `audit <workdir> <prompt-file>` → read-only sandbox, prints Sol's verdict)
+## Roles and execution profile
 
-## Iron Laws
+The coordinator owns context, the plan, handoffs and findings. The implementer owns code and repairs. Reviewers inspect an exact scope in fresh context; they do not repair it. These are roles, not model names.
 
-Violating the letter of a law is violating the law — there is no spirit-of-the-law exception.
+Select routes from the task's explicit profile or arguments before work starts:
 
-1. **Fable never writes production code** — no exception for one-line fixes. All code goes through the wrapper to Sol.
-2. **The plan gate is the only human gate** — never add or skip gates.
-3. **Two failures at any stage = hard-stop and report** (worktree path, task, thread ids, last error) — never delete the worktree.
+| Setting | Supported routes |
+|---|---|
+| `--execution codex` | Dedicated implementer through `e2e-codex.sh`; preserves the original planner/implementer split and is the standalone default |
+| `--execution native` | Dedicated implementer through an available, authorized native subagent facility |
+| `--execution direct` | The current agent is both coordinator and implementer; independent review still uses a separate context |
+| `--review codex` | Fresh read-only Codex consultation; standalone default |
+| `--review native` | Fresh native reviewer with enforced read-only access, when supported and authorized |
 
-## Red Flags — STOP
+Kandev, Codex, Claude Code and OpenCode are launch environments, not execution policies. Inspect actual tools and permissions. Do not choose a route from a model nickname, silently substitute self-review for independent review, or create Kandev tasks/sessions as hidden workers. Native subagents require the session's delegation authorization. If a required route is unavailable or unauthorized, report the missing capability; do not recursively invoke E2E to obtain it.
 
-- **Writing code yourself** → STOP, route it through `e2e-codex.sh` to Sol.
-- **Adding a confirmation stop after plan approval** → STOP, proceed; the plan gate was the only gate.
-- **Running a loop past its cap** (implement: 1 retry; Fable fix loop: 3; CI fixes: ship owns 3 total; plan audit: 2) → STOP, hard-stop and carry findings to PR comments.
-- **Deleting/recreating the worktree after failure** → STOP, leave it and report its path.
-- **Shipping with unresolved findings** → STOP, post each as a `[e2e unresolved]` PR comment first.
+For a Codex route, read `scripts/e2e-codex.sh`. Set `E2E_IMPLEMENTER_MODEL` for implementation and `E2E_REVIEWER_MODEL` for audits/reviews to the explicitly selected model IDs; the wrapper refuses an unset identity. The user's configured Codex model is a valid selection source: read and record it, then pass it explicitly instead of invisibly inheriting CLI defaults. Native routes record their requested model and actual model when observable. Unknown resolved identity stays unknown. Fresh context, different model and different provider are separate properties; the same model through two harnesses is not cross-model review.
 
-## Rationalizations
+The approved plan records the execution/review routes, identities, permissions and downstream actions. Changing routes must preserve these boundaries; materially different scope or permissions need a decision. A route cannot grant permissions the host or user has withheld. Only the designated implementer edits production code; in direct mode that is the current agent.
 
-| Excuse | Reality |
-|--------|---------|
-| It's a one-line fix, faster myself | All code goes through Sol — no line-count threshold |
-| Sol failed twice, I'll finish it | Two failures = hard-stop and report, not takeover |
-| I'll just add one more check-in with the user | The plan gate is the ONLY gate |
-| Findings are minor, ship clean | Every unresolved finding becomes a PR comment |
-| I'll ask Joel whether to move the ticket / mark the stream | Stage 7 step 4 decides that from CI state; asking is an interruption without a judgement call |
+## Boundaries and dependencies
 
-## When NOT to use
+- One plan approval gate; reuse explicit approval for the same plan/scope. Never proceed while a question is pending or manufacture approval from a timeout, turn ending or cancellation.
+- Two execution failures at a stage stop the run; preserve the workspace and report the task, sessions and last error. Findings are not execution failures. Record attempts; never reset them on resume.
+- Ship owns verification, publication, CI and feedback loops. No direct push/PR shortcut around ship. Merge and deployment are separate actions.
+- Dependencies: native file/search/shell tools, repository guides, this plugin's ship/verify/pick-up-linear-ticket workflows, and the selected review/implementation route. Use installed brainstorming/planning skills when available; otherwise perform the planning steps below directly. Missing external integrations remain visible blockers when required.
+- Read command dependencies as workflows; slash commands are not shell executables. Locate MCP capabilities by function and use the schemas actually exposed by the host.
 
-Trivial single-file changes, or when the user wants per-task involvement.
+Arguments: a ticket or task description, optional execution/review routes. For a ticket, use this plugin's pick-up-linear-ticket workflow for authorized context/claim actions. For an ad-hoc task, omit ticket operations. `--dry-run` is a read-only preview: no claim/status changes, worktree provisioning, child invocation, commits, publication or completion signals; show the proposed stages and capability gaps, then stop.
 
-## Dependencies
+## Stage 1 — Plan
 
-codex CLI (authenticated), gh CLI, superpowers plugin, this plugin's ship + pick-up-linear-ticket commands.
+1. Read the request, current task/PR ownership, repository guides and existing work. In Kandev, reuse its task/worktree and canonical plan. Load and preserve user edits to the plan before updating it.
+2. Establish acceptance criteria and write a plan with task file paths, expected tests and effort: low for mechanical changes, medium for routine feature work, high for cross-cutting integration, xhigh for subtle algorithms or correctness.
+3. Plan architecture, contracts, edge cases and acceptance criteria. Identify sensible increments that could be reviewed and released after their predecessors, with their purpose and dependencies. **PR boundaries are provisional** and may evolve within the approved scope/contracts. Tasks need not map one-to-one to PRs. Do not estimate or optimize for line counts during planning; ship finalizes packaging.
+4. Record dependency constraints and their source. Prefer existing facilities or supported official SDKs/established libraries where they remove substantial protocol or schema plumbing. An absent manifest is not a dependency ban. Surface the cost of an explicit restriction at the plan gate; never silently override it. Small checks do not automatically need libraries.
+5. Record runtime assumptions relevant to the design: lifetime, writers/processes, recovery/persistence, acceptable data loss and trust boundaries. Ephemeral/single-tenant does not imply one process or trusted input. Journals, locks, retries and supervisors require a concrete failure case; retain necessary input/filesystem protections.
+6. Plan audit through the selected fresh reviewer: supply the plan, constraints and repository, ask for `READY` or `REVISE` with concrete issues and evidence. Assess sensible delivery increments and integration risks without fixed PR boundaries or line estimates. At most two audit rounds; carry unresolved audit findings into the human decision. Missing/failed review is incomplete, not READY. An audit needing new permission cannot run before that permission is obtained.
+7. Present the concrete plan, route/identity choices, permitted effects and audit findings. In Kandev use its plan and question tools; elsewhere use the host's supported question facility. Optional rich previews must reflect the same plan revision and must not introduce a dependency on Claude Artifacts. Ask one Approve/Revise question, unless this exact scope already has explicit approval. Observe the tool's waiting contract: pending/timeout means stop and wait; rejection means revise or end. Start implementation only after approval.
 
-## Arguments
+## Stage 2 — Workspace and handoff
 
-- `/e2e INT-123` — Linear ticket: first invoke joel-workflow pick-up-linear-ticket for context and status moves.
-- `/e2e "<task description>"` — ad-hoc prompt.
-- `--dry-run` anywhere in the args: run stages 1–2 normally, then print every wrapper/gh/ship command verbatim instead of executing it, write nothing outside `.e2e/`, and stop before ship. Recommended on first use in a new repo.
+Use branch prefix `jjholmes927-`. If `[ -f "$(git rev-parse --git-dir)/gitdir" ]`, reuse the current linked worktree, irrespective of launcher. Do not create nested worktrees. Otherwise prefer the repository's `bin/create_worktree`; use an available worktree workflow or native Git only when no project provisioner exists. Validate the repository's environment and isolated runtime, not just the checkout's existence.
 
-## Stage 1 — Plan (Fable)
+Create `.e2e/` and exclude it using `git rev-parse --git-path info/exclude` (a worktree's `.git` is a file). Keep the plan local/untracked unless the user requested it committed. Use Kandev's canonical plan when present, with a revision/hash in the local handoff.
 
-1. If the argument is a Linear ticket id, invoke the pick-up-linear-ticket command from this plugin first.
-2. Invoke superpowers:brainstorming (keep it brief for small, well-specified tasks), then superpowers:writing-plans.
-3. The plan MUST give each task: exact file paths, test expectations, and an **effort grade** by task complexity (not project importance):
+Maintain `.e2e/handoff.md` and `.e2e/sessions.tsv` with task/issue, approved plan revision and actions, source revision, routes, harness/model identity, repo/base/head/tree, runtime, stage/owner, attempts and budgets, sessions, findings/dispositions, evidence and next action. No secrets. Read these and current Git state on resume, including under another harness; verify previous external outcomes before repeating actions. A changed tree invalidates dependent evidence. Never resume past a pending decision or cancellation.
 
-   | Task shape | Grade |
-   |------------|-------|
-   | Touches 1–2 files, fully specified, mechanical | low |
-   | Routine feature code, clear pattern to follow | medium |
-   | Cross-cutting or multi-file integration | high |
-   | Algorithmic, subtle correctness, or tricky domain logic | xhigh |
+## Stage 3 — Implement each task
 
-   Plan the architecture, contracts, edge cases and acceptance criteria. Identify sensible increments that could be reviewed and released after their predecessors, and describe their purpose and dependencies. **Treat proposed PR boundaries as provisional**; refine them as implementation reveals the actual shape of the work, while preserving the approved scope and contracts. Implementation tasks do not need to map one-to-one to PRs. Do not estimate or optimize for line counts during planning. Ship finalizes PR packaging and checks each PR's release readiness and size.
+1. Give the implementer the approved task, neighbouring constraints, slice acceptance criteria, dependency/runtime decisions and repository guides. Include: no new explanatory/doc/rationale comments; only machine-required directives and corrections to existing stale comments. Keep one statement per line, descriptive intermediate names and guard clauses where useful. Never compress syntax, strip useful whitespace or omit tests to fit a size limit. Run configured formatting/linting and relevant tests. Do not commit in a delegated task.
+2. Execute through the selected route. Codex: `scripts/e2e-codex.sh run <worktree> <effort> <prompt-file>`; capture its session. Native: send a bounded implementation brief, never `/e2e` or an instruction to orchestrate further agents. Direct: implement in this session within the approved scope. Delegated children cannot change the route or publish.
+3. Record status and observed diff/tests. Nonzero failure, empty/malformed response, or no intended change without evidence the task is already satisfied: one retry with the actual error. Second execution failure stops. Missing credentials/capabilities are blockers, not reasons to burn retries or take over an unauthorized route.
+4. Checkpoint only intended files; preserve unrelated work. Commit with an imperative task message and record the SHA. Native/direct implementation does not require a fictional Codex thread ID.
 
-   Record the repository's dependency constraints and their source. Prefer existing facilities or supported official SDKs and established libraries when they remove substantial protocol or schema plumbing. An absent package manifest is not a dependency ban; add one when justified and permitted. If an explicit restriction forces bespoke plumbing, surface that tradeoff at the plan gate rather than silently overriding it. Choose dependencies for maintained support and compatibility, not popularity alone; small checks do not automatically need a library.
+## Stage 4 — Implementer self-review
 
-   Record the actual runtime assumptions relevant to the design: state lifetime, number of processes/writers, persistence and recovery needs, acceptable data loss, and trust boundaries. Do not assume ephemeral or single-tenant means single-process or trusted input. Journals, locks, retries and supervisors need a concrete requirement or failure case; retain necessary input and filesystem protections. Carry these constraints into implementation and review.
-4. Sol plan audit (cross-model, before the human sees the plan): write the plan plus "Audit this plan for correctness, security, and completeness against the repo. Assess the proposed increments for sensible review/release boundaries and integration risks, without requiring fixed PR boundaries or line estimates. Check that dependencies and state-management complexity follow the recorded constraints. Verdict: READY, or REVISE with concrete issues." to a temp file; run `e2e-codex.sh audit <repo-root> <file>` (read-only sandbox — safe on the main checkout). On REVISE, fix the issues and re-audit. Max 2 audit rounds; if still REVISE, present the plan with the unresolved audit notes attached.
-5. Present the plan at the gate:
-   - If the plan touches anything user-facing (UI, copy, notifications end users see), has 3+ tasks, or has any task graded high/xhigh: publish a plan-review Artifact rendered FROM the plan file (load the `artifact-design` skill first). Decisions-first layout: TL;DR stats (tasks, effort grades, migrations, test counts), a small UI mockup when the change is user-facing, the locked decisions, one card per task (files, effort grade, tests), the full Sol audit trail (each round's verdict and what was fixed, unresolved notes flagged), and an on-approve pipeline strip. The plan `.md` stays canonical — the artifact is a rendering; regenerate it from the file after any plan change, never edit it independently.
-   - If none of those hold (small, internal-only plan): no artifact. The gate message is a short chat summary — TL;DR stats, locked decisions, audit trail one-liners — plus the raw plan path.
-   - Send the artifact URL (when one was published) plus the raw plan path, then ONE Approve/Revise question (AskUserQuestion). Invite task-anchored notes ("T2: …") via the Other option.
-   - WAIT for explicit approval. This is the gate — do not start Stage 2 without it, and do not add further approval stops after it.
+One self-review pass over the task commit, including relevant unchanged callers. The implementer fixes accepted findings, runs affected checks and amends the checkpoint where appropriate. Recapture SHA/tree after any edit/amend; stale identities never feed later review.
 
-## Stage 2 — Workspace
+## Stage 5 — Independent task review
 
-Branch: `jjholmes927-<slug>[-TICKET]`. Resolve the workspace in this order:
+1. Use the selected fresh reviewer on the exact task commit with the task/constraints. Require concrete severity, scenario, file/line and evidence; instruct the reviewer to try to refute each finding. No edits, commits, pushes or external comments from the reviewer.
+2. Require a result stating scope/base/head, requested/observed identity, coverage, findings and `complete` or `incomplete`. Empty output, timeout or missing required coverage never means clean. Label agreement `[both]`, `[implementer-only]` or `[reviewer-only]`; agreement is supporting evidence, not proof.
+3. Route accepted fixes to the designated implementer, refresh identities and recheck the failing behaviour. At most three fix rounds per task; record them in the handoff. Preserve surviving disagreements and carry unresolved findings to the PR. Do not reset the execution-failure stop.
 
-1. **Already isolated?** If `[ -f "$(git rev-parse --git-dir)/gitdir" ]` (a linked worktree's git dir carries a `gitdir` file; a main checkout's does not — this holds from any subdirectory, unlike comparing `--git-dir` with `--git-common-dir`, which mixes absolute and relative paths), the current directory is a linked worktree — whoever launched this session (new-agent, Claude's background isolation, Kandev, or you by hand) already gave it its own workspace. Use the CURRENT worktree and create the branch in place. Never create a worktree inside it, and never key this decision on a runtime-specific variable such as `CLAUDE_JOB_DIR`: the same skill must behave identically under any launcher.
-2. **Project provisioning next.** Else, if the repo ships `bin/create_worktree`, run `bin/create_worktree <branch>` and cd into the worktree it creates — it provisions env, database, credentials and agent memory fail-closed, which the generic skill cannot.
-3. **Fallback.** Only when neither applies, invoke superpowers:using-git-worktrees.
+## Stage 6 — Final branch review
 
-Record the worktree path. Create `.e2e/` inside it and add `.e2e/` to the exclude file once: `EXCL=$(git -C <worktree> rev-parse --git-path info/exclude); mkdir -p "$(dirname "$EXCL")"; grep -qx '.e2e/' "$EXCL" 2>/dev/null || printf '\n.e2e/\n' >> "$EXCL"` (in a worktree `.git` is a file, so the literal `.git/info/exclude` path does not exist; `--git-path` resolves the real one, and the guard stops the line piling up on re-runs). This MUST happen before Stage 3 writes anything, else the no-diff check misreads `.e2e/` noise.
+Use the selected fresh reviewer to check the whole branch against approved scope: task coverage, naming, duplication, dead code, structural readability and complexity justified by runtime/dependency constraints. Check candidate release increments without their successors; a green final stack does not establish earlier slices' readiness. One repair loop through the implementer; retain remaining findings explicitly.
 
-## Stage 3 — Implement each task (Sol)
+## Stage 7 — Ship and hand back
 
-For each plan task, in order:
+1. Invoke this plugin's ship workflow per PR branch in dependency order. Ship enforces both **at most 500 total added/deleted lines** against the actual base and **an incrementally releasable, understandable unit**. A PR may depend on predecessors, never on successors to restore correctness. Checkpoint commits are candidate boundaries only. No compression, omitted tests or broken intermediate states. Each slice needs its own formatting, verification, fingerprint, readiness/size gates and CI evidence. Do not stage a local plan or `.e2e/` artifacts.
+2. Ship owns all CI repairs, at most three total rounds across re-entry/resume; return repairs to the selected implementer and reverify changed code. The parent's two-execution-failure stop still applies. Do not start another CI budget.
+3. Carry unresolved findings visibly in the PR using the already-authorized publication route; record any posting/permission failure as outstanding rather than silently claiming completion.
+4. Read back PR/head and required CI outcomes. Only then move an authorized Linear ticket to In Review, using the available integration. Never mark Done from PR readiness. Ad-hoc work has no ticket lifecycle. Failures remain blocked/in progress with the workspace and evidence preserved.
+5. Report PRs, task outcomes, review/fix counts, findings, evidence gaps, identities and remaining work. No Fleet command is needed for Kandev state. Where a Kandev step requires an explicit completion signal, call the exposed `step_complete_kandev` only when that step's own criteria are evidenced and no decision/action is pending. If unavailable, report the missing handoff; never substitute a turn ending or a Review column for success.
 
-1. Write the task prompt to `.e2e/task-N-prompt.md` containing: the plan task verbatim; relevant constraints from neighbouring tasks; the slice's acceptance checks, dependency decisions and runtime assumptions; "Read AGENTS.md (or CLAUDE.md if no AGENTS.md) in the repo root and follow its conventions"; "HARD RULE — NEVER add code comments: no explanatory, doc, or rationale comments, not even for non-obvious workarounds. Only exceptions: machine-required directives (rubocop:disable, eslint-disable, frozen_string_literal, shebangs) and updating an EXISTING comment your change makes factually stale. If something needs explaining, say it in your final message instead."; "Keep code readable: one statement per line, descriptive intermediate names and guard clauses where they clarify control flow. Never compress syntax, remove useful whitespace or omit tests to meet a PR size limit. Run the repository's formatter and linter for changed code."; "Run the project's tests for the code you changed and make them pass before finishing"; "Do not commit".
-2. Run: `e2e-codex.sh run <worktree> <effort> .e2e/task-N-prompt.md` → capture thread id.
-3. Append `task-N<TAB><thread-id><TAB><effort><TAB>implemented` to `.e2e/sessions.tsv`. Track every attempt's status by updating this file — never count retries from memory.
-4. Failure policy (**implement: 1 retry then stop**): non-zero exit or no diff (`git -C <worktree> status --porcelain` empty) → retry ONCE with the error/`.e2e/last-message.txt` tail appended to the prompt, recording the retry in `.e2e/sessions.tsv`. Second failure → hard-stop per the Iron Laws.
-   - Sandbox network is enabled via the wrapper, but on macOS codex's seatbelt has historically ignored it. If a failure looks like network/dependency-install denial rather than a code problem, do NOT burn the retry — surface it and suggest pre-installing deps in the worktree first.
-   - If the wrapper prints no thread id, or the JSONL log is empty/malformed, treat it as a stage failure: inspect `.e2e/codex-*.jsonl` before retrying.
-5. Checkpoint commit: `git -C <worktree> add -A && git -C <worktree> commit -m "wip: task N — <task title>"`. Record the sha.
+## Codex route details
 
-## Stage 4 — Sol self-review
+Wrapper: `${CLAUDE_PLUGIN_ROOT}/skills/e2e/scripts/e2e-codex.sh`. Use its `run`, `resume`, `review` and `audit` forms. Review/audit enforce read-only shell access; implementation uses workspace-write only within the approved route. Reviewers must not use state-changing MCP tools; disable such integrations for required read-only review. If the host cannot enforce the required boundary, block that route.
 
-1. `e2e-codex.sh review <worktree> --commit <task-sha>` → capture output.
-2. If it reports findings: write them to `.e2e/task-N-selffix.md` with "Fix these findings from your own review", then `e2e-codex.sh resume <worktree> <thread-id> <effort> .e2e/task-N-selffix.md`, and amend: `git -C <worktree> add -A && git -C <worktree> commit --amend --no-edit`. Amending rewrites the sha: re-capture it with `git -C <worktree> rev-parse HEAD` and use that fresh sha for all later reviews; never reuse a pre-amend sha. One self-review pass only.
-
-## Stage 5 — Fable review + fix loop (**per-task Fable fix loop: 3 max**)
-
-1. Dispatch a code-reviewer subagent (superpowers:requesting-code-review conventions) on `git -C <worktree> show <task-sha>` with the plan task as context, instructed to try to REFUTE its own findings before reporting — only findings that survive refutation are returned. Findings must be concrete: file, line, defect, why it matters.
-2. Arbitrate and label each surviving finding by agreement: `[both]` (Sol's Stage 4 self-review also flagged it), `[claude-only]`, or `[codex-only]` (from Stage 4 but unfixed). Drop refuted findings and nits; keep real defects — `[both]` findings are highest-confidence, never drop them without re-verification.
-3. If real defects remain: write them to `.e2e/task-N-fix-<loop>.md` as a fix brief, `e2e-codex.sh resume` with the task's effort, amend the checkpoint commit, then re-capture the sha with `git -C <worktree> rev-parse HEAD` and use that fresh sha for all later reviews (never reuse a pre-amend sha), and re-verify each finding yourself (read the diff — do not re-run the full review). Record each loop's status in `.e2e/sessions.tsv` — count loops from the file, never from memory.
-4. After 3 loops, carry unresolved findings forward to Stage 7's PR-comment list, keeping their agreement labels.
-
-## Stage 6 — Final branch review (Fable)
-
-Whole-branch check against the approved plan: every task present, no plan drift, cross-task coherence (naming, duplication, dead code), readable control flow and complexity justified by the recorded dependency/runtime constraints. Check each proposed PR's release readiness without its successors; whole-stack success alone is insufficient. Real defects → one fix loop via `e2e-codex.sh resume` against the most relevant task session (effort `high`); still-unresolved → PR-comment list.
-
-## Stage 7 — Ship
-
-1. The plan file never enters the branch — docs/plans/ is a local working document; the PR carries implementation only. Invoke this plugin's ship command for each PR branch in dependency order. Ship formats and measures each PR against its actual base, enforcing both **at most 500 total added/deleted lines** and **an incrementally releasable, understandable unit of work**. A slice may depend on predecessors, never on successors for correctness. If a slice is too large, revise its boundaries into coherent, independently verified increments; checkpoint commits are only candidates for those boundaries. Never compress code, omit tests or publish a broken intermediate slice to meet the cap. Ship owns verification, commits, push, PR creation (What/Why) and CI watching for every resulting branch. Before ship commits leftovers, confirm `git status` shows no plan file staged (it should be gitignored; if not, leave it untracked).
-
-   **Red flag — hand-rolling Stage 7 is a violation.** Running `git push` / `gh pr create` / a CI watch directly instead of invoking ship skips ship's verify gate, and transcript audits show this is the main path by which unverified changes reach PRs. Stacked PRs, multi-repo pushes, and "it's just a small branch" are not exemptions: invoke ship per branch. If ship genuinely cannot run (e.g. its skill is unavailable in this session), say so in the Stage 7 report and run /verify manually before any push.
-2. Post each carried-forward finding as a PR comment: `gh pr comment <num> --body "..."` prefixed with `[e2e unresolved]`.
-3. CI failures: ship owns the repair loop and its maximum of 3 rounds for the whole invocation. Hand repairs to `e2e-codex.sh resume` (effort `high`, most relevant task session), then return to ship for affected tests, re-verification, fingerprint/size checks, push and CI watch. Record each round in `.e2e/sessions.tsv`; do not add or reset a second CI retry budget here. The stricter two-consecutive-failures hard stop still applies.
-4. Ticket and stream state — do this yourself, never ask the human whether to:
-   - Only after the PR is up AND CI is green (or the only red checks are the non-blocking ones noted in the report): Linear ticket runs move the ticket to **In Review**: load the tool first (`ToolSearch(query="select:mcp__linear-server__save_issue")`), then `mcp__linear-server__save_issue(id: "<TICKET>", state: "In Review")`. Never move it to Done — Done follows the merge, not the PR. If the state name is rejected, report the error and leave the ticket where it is.
-   - Then record the stream outcome: `fleet-status complete "<TICKET>: PR #<num> <url>"` (ad-hoc runs: describe the PR instead of a ticket). On any hard-stop — including the CI cap in step 3 — leave the ticket In Progress and record `fleet-status awaiting "<what is blocked and why>"` instead. Run it in your own shell, never via a subagent; if `fleet-status` is not on PATH, skip it and say so in the report.
-5. Report: PR URL, tasks completed, fix-loop counts, unresolved findings, total codex sessions, ticket state.
+For contextual reviews use `audit` with a complete bounded brief and required result format. Native `review` is appropriate when commit/base scope supplies enough context. Resume implementation only using its recorded session and model. Model flags identify the requested model; report resolved identity only when independently observable. Do not claim provider diversity from the CLI name.

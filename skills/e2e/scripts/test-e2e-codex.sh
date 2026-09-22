@@ -29,6 +29,8 @@ SHIM
 chmod +x "$TMP/bin/codex"
 export PATH="$TMP/bin:$PATH"
 export CODEX_SHIM_ARGS="$TMP/args.log"
+export E2E_IMPLEMENTER_MODEL=fixture-implementer
+export E2E_REVIEWER_MODEL=fixture-reviewer
 
 SUT="$HERE/e2e-codex.sh"
 PROMPT="$TMP/prompt.txt"; echo "do the thing" > "$PROMPT"
@@ -42,6 +44,7 @@ case "$args" in *"approval_policy=never"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)
 case "$args" in *"sandbox_workspace_write.network_access=true"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: run passes network_access=true";; esac
 case "$args" in *"model_reasoning_effort=high"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: run passes effort";; esac
 case "$args" in *"-C $TMP/work"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: run passes -C workdir";; esac
+case "$args" in *"--model fixture-implementer"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: implementer model is explicit";; esac
 
 : > "$CODEX_SHIM_ARGS"
 out=$("$SUT" resume "$TMP/work" aaaa-1111-bbbb-2222 low "$PROMPT")
@@ -54,6 +57,8 @@ out=$("$SUT" review "$TMP/work" --commit deadbeef)
 case "$out" in *"REVIEW: 1 finding"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: review passes output through";; esac
 args=$(cat "$CODEX_SHIM_ARGS")
 case "$args" in *"--commit deadbeef"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: review forwards scope args";; esac
+case "$args" in *"--model fixture-reviewer"*"sandbox_mode=read-only"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: reviewer model and read-only sandbox";; esac
+case "$args" in *"--ignore-user-config --ignore-rules --ephemeral"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: review is isolated from user config";; esac
 
 : > "$CODEX_SHIM_ARGS"
 out=$("$SUT" audit "$TMP/work" "$PROMPT")
@@ -69,6 +74,15 @@ nothread_out=$(CODEX_SHIM_NO_THREAD=1 "$SUT" run "$TMP/work" low "$PROMPT" 2>/de
 nothread_rc=$?
 assert "run exits 1 when no thread.started" "1" "$nothread_rc"
 assert "run prints nothing when no thread.started" "" "$nothread_out"
+
+E2E_IMPLEMENTER_MODEL= "$SUT" run "$TMP/work" low "$PROMPT" >/dev/null 2>&1
+assert "missing implementer model fails" "2" "$?"
+E2E_REVIEWER_MODEL= "$SUT" audit "$TMP/work" "$PROMPT" >/dev/null 2>&1
+assert "missing reviewer model fails" "2" "$?"
+E2E_CHILD=1 "$SUT" run "$TMP/work" low "$PROMPT" >/dev/null 2>&1
+assert "recursive child invocation fails" "2" "$?"
+"$SUT" review "$TMP/work" --uncommitted --dangerously-bypass-approvals-and-sandbox >/dev/null 2>&1
+assert "review cannot override permissions" "2" "$?"
 
 echo "---"
 echo "pass=$PASS fail=$FAIL"

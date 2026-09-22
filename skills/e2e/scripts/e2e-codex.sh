@@ -15,13 +15,21 @@ thread_id_from() {
 
 cmd=${1:-}; [[ -n "$cmd" ]] || usage; shift
 
+[[ ${E2E_CHILD:-0} != 1 ]] || { echo "e2e-codex: children cannot launch another E2E route" >&2; exit 2; }
+case "$cmd" in
+  run|resume) model=${E2E_IMPLEMENTER_MODEL:-} ;;
+  review|audit) model=${E2E_REVIEWER_MODEL:-} ;;
+  *) usage ;;
+esac
+[[ -n "$model" ]] || { echo "e2e-codex: select E2E_IMPLEMENTER_MODEL or E2E_REVIEWER_MODEL for this route" >&2; exit 2; }
+
 case "$cmd" in
   run)
     [[ $# -eq 3 ]] || usage
     workdir=$1 effort=$2 prompt=$3
     mkdir -p "$workdir/.e2e"
     log=$(mktemp "$workdir/.e2e/codex-XXXXXX"); mv "$log" "$log.jsonl"; log="$log.jsonl"
-    codex exec --sandbox workspace-write -c approval_policy=never --json -C "$workdir" \
+    E2E_CHILD=1 codex exec --model "$model" --sandbox workspace-write -c approval_policy=never --json -C "$workdir" \
       -c sandbox_workspace_write.network_access=true \
       -c model_reasoning_effort="$effort" \
       -o "$workdir/.e2e/last-message.txt" \
@@ -36,7 +44,7 @@ case "$cmd" in
     workdir=$1 session=$2 effort=$3 prompt=$4
     mkdir -p "$workdir/.e2e"
     log=$(mktemp "$workdir/.e2e/codex-XXXXXX"); mv "$log" "$log.jsonl"; log="$log.jsonl"
-    (cd "$workdir" && codex exec resume "$session" -c sandbox_mode="workspace-write" -c approval_policy=never --json \
+    (cd "$workdir" && E2E_CHILD=1 codex exec resume "$session" --model "$model" -c sandbox_mode="workspace-write" -c approval_policy=never --json \
       -c sandbox_workspace_write.network_access=true \
       -c model_reasoning_effort="$effort" \
       -o "$workdir/.e2e/last-message.txt" \
@@ -49,12 +57,17 @@ case "$cmd" in
   review)
     [[ $# -ge 1 ]] || usage
     workdir=$1; shift
-    (cd "$workdir" && codex exec review "$@")
+    case "${1:-}" in
+      --commit|--base) [[ $# -eq 2 && -n "$2" ]] || usage ;;
+      --uncommitted) [[ $# -eq 1 ]] || usage ;;
+      *) usage ;;
+    esac
+    (cd "$workdir" && E2E_CHILD=1 codex exec review --model "$model" --ignore-user-config --ignore-rules --ephemeral -c sandbox_mode="read-only" -c approval_policy=never "$@")
     ;;
   audit)
     [[ $# -eq 2 ]] || usage
     workdir=$1 prompt=$2
-    codex exec --sandbox read-only -c approval_policy=never -C "$workdir" \
+    E2E_CHILD=1 codex exec --model "$model" --ignore-user-config --ignore-rules --ephemeral --sandbox read-only -c approval_policy=never -C "$workdir" \
       -c model_reasoning_effort=high \
       - < "$prompt"
     ;;
