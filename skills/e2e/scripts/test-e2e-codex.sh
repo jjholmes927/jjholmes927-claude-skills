@@ -84,6 +84,16 @@ assert "recursive child invocation fails" "2" "$?"
 "$SUT" review "$TMP/work" --uncommitted --dangerously-bypass-approvals-and-sandbox >/dev/null 2>&1
 assert "review cannot override permissions" "2" "$?"
 
+: > "$CODEX_SHIM_ARGS"
+E2E_IMPLEMENTER_MODEL=luna "$SUT" run "$TMP/work" low "$PROMPT" >/dev/null
+args=$(cat "$CODEX_SHIM_ARGS")
+case "$args" in *"--model gpt-6-luna"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: luna alias resolves to gpt-6-luna";; esac
+
+: > "$CODEX_SHIM_ARGS"
+E2E_REVIEWER_MODEL=astra "$SUT" audit "$TMP/work" "$PROMPT" >/dev/null
+args=$(cat "$CODEX_SHIM_ARGS")
+case "$args" in *"--model gpt-6-astra"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: astra alias resolves to gpt-6-astra";; esac
+
 echo "---"
 echo "pass=$PASS fail=$FAIL"
 [[ "$FAIL" == "0" ]]

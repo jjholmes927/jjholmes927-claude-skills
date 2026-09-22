@@ -13,12 +13,22 @@ thread_id_from() {
   grep -m1 '"type":"thread.started"' "$1" | sed -E 's/.*"thread_id":"([^"]+)".*/\1/'
 }
 
+resolve_model() {
+  case "$1" in
+    luna) echo "gpt-6-luna" ;;
+    astra) echo "gpt-6-astra" ;;
+    opus) echo "claude-opus-5-5" ;;
+    fable) echo "claude-fable-5-1" ;;
+    *) echo "$1" ;;
+  esac
+}
+
 cmd=${1:-}; [[ -n "$cmd" ]] || usage; shift
 
 [[ ${E2E_CHILD:-0} != 1 ]] || { echo "e2e-codex: children cannot launch another E2E route" >&2; exit 2; }
 case "$cmd" in
-  run|resume) model=${E2E_IMPLEMENTER_MODEL:-} ;;
-  review|audit) model=${E2E_REVIEWER_MODEL:-} ;;
+  run|resume) model=$(resolve_model "${E2E_IMPLEMENTER_MODEL:-}") ;;
+  review|audit) model=$(resolve_model "${E2E_REVIEWER_MODEL:-}") ;;
   *) usage ;;
 esac
 [[ -n "$model" ]] || { echo "e2e-codex: select E2E_IMPLEMENTER_MODEL or E2E_REVIEWER_MODEL for this route" >&2; exit 2; }
