@@ -40,6 +40,7 @@ fi
 SHIM
 chmod +x "$TMP/bin/codex"
 export PATH="$TMP/bin:$PATH"
+export CODEX_COLLAB_MODEL=fixture-reviewer
 export CODEX_SHIM_ARGS="$TMP/args.log"
 
 SUT="$HERE/collab-codex.sh"
@@ -75,6 +76,13 @@ args=$(cat "$CODEX_SHIM_ARGS")
 contains "review forwards scope args" "--base main" "$args"
 contains "review forces read-only sandbox" "sandbox_mode=read-only" "$args"
 contains "review forces approval_policy=never" "approval_policy=never" "$args"
+contains "review pins model" "--model fixture-reviewer" "$args"
+contains "review ignores user configuration" "--ignore-user-config --ignore-rules" "$args"
+
+CODEX_COLLAB_MODEL= "$SUT" ask "$TMP/work" low "$PROMPT" >/dev/null 2>&1
+assert "missing model fails" "2" "$?"
+"$SUT" review "$TMP/work" --uncommitted --dangerously-bypass-approvals-and-sandbox >/dev/null 2>&1
+assert "review rejects permission overrides" "2" "$?"
 
 CODEX_SHIM_EXIT=3 "$SUT" ask "$TMP/work" low "$PROMPT" >/dev/null 2>&1
 assert "ask propagates codex exit code" "3" "$?"
