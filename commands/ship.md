@@ -247,7 +247,9 @@ A failed check may only be excluded from the gate with evidence — a log showin
 
 Inspect the repository's configured review automation. Where present, the `AI code review` workflow and Cursor Bugbot post findings; wait for those configured checks and consolidate their output rather than duplicating the review locally. If neither is configured, report that and retain the reviews already required by the parent workflow; do not invent a bot gate.
 
-1. Wait for both review bots to post — they often start only after CI is green. Poll, bounded to ~3 minutes:
+1. Check whether this PR is an intermediate slice of an unmerged stack (its target base is another active feature branch, or successors are pending):
+   - **Intermediate Stack PR**: Skip the 3-minute review-bot polling pause. Proceed directly; review-bot feedback is consolidated on the top-of-stack PR.
+   - **Standalone or Top-of-Stack PR**: Wait for configured review bots to post — they often start only after CI is green. Poll, bounded to ~3 minutes:
    ```bash
    for i in $(seq 1 9); do
      gh pr checks <PR_NUMBER> --json name,state \
