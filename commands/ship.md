@@ -24,6 +24,8 @@ Preflight → Format → Stage → Branch (if on main) → Commit → Verify (AL
 
 ## Step 0: Preflight
 
+When `command -v workflow-doctor` succeeds, run `workflow-doctor` once and report any warnings with their refresh commands. It checks local source/adapter drift without updating anything. Warnings are informational, introduce no approval gate and do not waive verification requirements. If unavailable, report that drift was not checked and continue the normal preflight; dotfiles documents installation.
+
 Before anything, verify prerequisites:
 
 ```bash
