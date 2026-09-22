@@ -4,12 +4,12 @@
     "name": "jjholmes927"
   },
   "description": "Joel's personal Claude Code plugin marketplace",
-  "version": "2.19.0",
+  "version": "2.20.1",
   "plugins": [
     {
       "name": "joel-workflow",
       "description": "Personal workflow commands (ship, verify, verify-ui, pick-up-linear-ticket, brag-doc, skill-reviewer, newspaper, brief) and skills (guideline-refresher, e2e, codex-collab, writing-pr-descriptions, dev-workflow-iterate, orchestrating-lanes)",
-      "version": "2.19.0",
+      "version": "2.20.1",
       "source": {
         "source": "github",
         "repo": "jjholmes927/jjholmes927-claude-skills"

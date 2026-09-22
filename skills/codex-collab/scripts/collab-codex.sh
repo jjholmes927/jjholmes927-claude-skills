@@ -35,6 +35,8 @@ emit() {
 }
 
 cmd=${1:-}; [[ -n "$cmd" ]] || usage; shift
+model=${CODEX_COLLAB_MODEL:-}
+[[ -n "$model" ]] || { echo "codex-collab: select CODEX_COLLAB_MODEL explicitly" >&2; exit 2; }
 
 case "$cmd" in
   ask)
@@ -44,7 +46,7 @@ case "$cmd" in
     log=$(new_log "$dir")
     msg="$dir/last-message.txt"
     : > "$msg"
-    codex exec --sandbox read-only -c approval_policy=never --json -C "$workdir" \
+    codex exec --model "$model" --ignore-user-config --ignore-rules --sandbox read-only -c approval_policy=never --json -C "$workdir" \
       -c model_reasoning_effort="$effort" \
       -o "$msg" \
       - < "$prompt" > "$log"
@@ -67,7 +69,7 @@ case "$cmd" in
     log=$(new_log "$dir")
     msg="$dir/last-message.txt"
     : > "$msg"
-    (cd "$workdir" && codex exec resume "$session" -c sandbox_mode="read-only" -c approval_policy=never --json \
+    (cd "$workdir" && codex exec resume "$session" --model "$model" --ignore-user-config --ignore-rules -c sandbox_mode="read-only" -c approval_policy=never --json \
       -c model_reasoning_effort="$effort" \
       -o "$msg" \
       - < "$prompt" > "$log")
@@ -81,7 +83,12 @@ case "$cmd" in
   review)
     [[ $# -ge 1 ]] || usage
     workdir=$1; shift
-    (cd "$workdir" && codex exec review -c sandbox_mode="read-only" -c approval_policy=never "$@")
+    case "${1:-}" in
+      --commit|--base) [[ $# -eq 2 && -n "$2" ]] || usage ;;
+      --uncommitted) [[ $# -eq 1 ]] || usage ;;
+      *) usage ;;
+    esac
+    (cd "$workdir" && codex exec review --model "$model" --ignore-user-config --ignore-rules --ephemeral -c sandbox_mode="read-only" -c approval_policy=never "$@")
     ;;
   *) usage ;;
 esac

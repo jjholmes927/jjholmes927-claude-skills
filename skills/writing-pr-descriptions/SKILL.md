@@ -5,7 +5,7 @@ description: Use whenever a pull-request description is being written or changed
 
 # Writing PR Descriptions
 
-Goal: a reviewer absorbs the description in under 30 seconds and knows what changed, why, and what to watch. Format agreed with the Interpret team (PR-context experiment, Jul 2026), building on the 400-line PR cap.
+Goal: a reviewer absorbs the description in under 30 seconds and knows what changed, why, and what to watch. Format agreed with the Interpret team (PR-context experiment, Jul 2026). Ship owns the current PR size and release-readiness gates.
 
 ## Format
 
