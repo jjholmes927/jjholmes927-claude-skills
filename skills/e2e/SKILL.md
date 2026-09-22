@@ -9,19 +9,29 @@ description: "Use when the user says /e2e, 'take this end to end', 'run the e2e 
 
 The coordinator owns context, the plan, handoffs and findings. The implementer owns code and repairs. Reviewers inspect an exact scope in fresh context; they do not repair it. These are roles, not model names.
 
-Select routes from the task's explicit profile or arguments before work starts:
+Select routes and model identities from the task's explicit profile, arguments, or defaults:
 
 | Setting | Supported routes |
 |---|---|
-| `--execution codex` | Dedicated implementer through `e2e-codex.sh`; preserves the original planner/implementer split and is the standalone default |
+| `--execution direct` (or `--direct`) | The current agent is both coordinator and implementer; independent review still uses a separate context (default) |
+| `--execution codex` (or `--impl codex`, `--impl <model>`) | Dedicated implementer through `e2e-codex.sh` |
 | `--execution native` | Dedicated implementer through an available, authorized native subagent facility |
-| `--execution direct` | The current agent is both coordinator and implementer; independent review still uses a separate context |
-| `--review codex` | Fresh read-only Codex consultation; standalone default |
+| `--review codex` (or `--review <model>`) | Fresh read-only Codex consultation (default: `gpt-6-luna`) |
 | `--review native` | Fresh native reviewer with enforced read-only access, when supported and authorized |
+
+Default policy:
+- Implementation defaults to `--execution direct` (in-session execution by the current coordinator model), avoiding subagent serialization latency.
+- Independent adversarial review defaults to `--review codex` with `gpt-6-luna` for cross-model scrutiny. When coordinating from a Codex session running Luna, the reviewer defaults to `gpt-6-astra`.
+
+CLI argument shorthands:
+- `--direct`: Shorthand for `--execution direct`.
+- `--impl <model|route>`: Set implementation route or model (e.g. `--impl direct`, `--impl astra`, `--impl codex`).
+- `--review <model|route>`: Set review route or model (e.g. `--review luna`, `--review astra`, `--review native`).
+- Model aliases resolve automatically: `luna` → `gpt-6-luna`, `astra` → `gpt-6-astra`, `opus` → `claude-opus-5-5`, `fable` → `claude-fable-5-1`.
 
 Kandev, Codex, Claude Code and OpenCode are launch environments, not execution policies. Inspect actual tools and permissions. Do not choose a route from a model nickname, silently substitute self-review for independent review, or create Kandev tasks/sessions as hidden workers. Native subagents require the session's delegation authorization. If a required route is unavailable or unauthorized, report the missing capability; do not recursively invoke E2E to obtain it.
 
-For a Codex route, read `scripts/e2e-codex.sh`. Set `E2E_IMPLEMENTER_MODEL` for implementation and `E2E_REVIEWER_MODEL` for audits/reviews to the explicitly selected model IDs; the wrapper refuses an unset identity. The user's configured Codex model is a valid selection source: read and record it, then pass it explicitly instead of invisibly inheriting CLI defaults. Native routes record their requested model and actual model when observable. Unknown resolved identity stays unknown. Fresh context, different model and different provider are separate properties; the same model through two harnesses is not cross-model review.
+For a Codex route, read `scripts/e2e-codex.sh`. Set `E2E_IMPLEMENTER_MODEL` for implementation and `E2E_REVIEWER_MODEL` for audits/reviews to the explicitly selected model IDs; the wrapper refuses an unset identity. When not specified by the user or task profile, resolve model defaults and aliases per the policy above, or from the user's configured Codex model. Native routes record their requested model and actual model when observable. Unknown resolved identity stays unknown. Fresh context, different model and different provider are separate properties; the same model through two harnesses is not cross-model review.
 
 The approved plan records the execution/review routes, identities, permissions and downstream actions. Changing routes must preserve these boundaries; materially different scope or permissions need a decision. A route cannot grant permissions the host or user has withheld. Only the designated implementer edits production code; in direct mode that is the current agent.
 
@@ -34,7 +44,7 @@ The approved plan records the execution/review routes, identities, permissions a
 - Dependencies: native file/search/shell tools, repository guides, this plugin's ship/verify/pick-up-linear-ticket workflows, and the selected review/implementation route. Use installed brainstorming/planning skills when available; otherwise perform the planning steps below directly. Missing external integrations remain visible blockers when required.
 - Read command dependencies as workflows; slash commands are not shell executables. Locate MCP capabilities by function and use the schemas actually exposed by the host.
 
-Arguments: a ticket or task description, optional execution/review routes. For a ticket, use this plugin's pick-up-linear-ticket workflow for authorized context/claim actions. For an ad-hoc task, omit ticket operations. `--dry-run` is a read-only preview: no claim/status changes, worktree provisioning, child invocation, commits, publication or completion signals; show the proposed stages and capability gaps, then stop.
+Arguments: a ticket or task description, optional execution/review routes (e.g. `--direct`, `--impl <model>`, `--review <model>`). For a ticket, use this plugin's pick-up-linear-ticket workflow for authorized context/claim actions. For an ad-hoc task, omit ticket operations. `--dry-run` is a read-only preview: no claim/status changes, worktree provisioning, child invocation, commits, publication or completion signals; show the proposed stages and capability gaps, then stop.
 
 ## Stage 1 — Plan
 
