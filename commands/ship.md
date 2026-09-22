@@ -28,11 +28,13 @@ Before anything, verify prerequisites:
 
 ```bash
 git rev-parse --git-dir        # We're in a git repo
-git status --porcelain         # There are changes to commit
+git status --porcelain         # Uncommitted work, if any
 gh auth status                 # GitHub CLI is authenticated
 ```
 
-If there are no changes to commit, stop and tell the user.
+Resolve the PR base (the existing PR's base, the stack parent, or `origin/main`) as `$BASE` and verify the ref exists. Inspect both `git diff "$BASE"...HEAD` and uncommitted work. A clean working tree with committed, unpublished changes must continue through verification and publication. Stop for no work only when both are empty; do not create an empty commit. If the base is unavailable, resolve it before deciding there is no work.
+
+Record the corresponding GitHub base branch name as `$PR_BASE_BRANCH` (for example, `main` for `origin/main`). For a stack, publish predecessors first and use the immediate parent branch as the next PR's base; creating every PR against the default branch would measure and publish different diffs.
 
 Check for an existing PR on the current branch and capture its number for later steps:
 ```bash
@@ -42,17 +44,19 @@ If `$PR_NUMBER` is set, a PR already exists — skip PR creation in Step 6 (just
 
 ## Step 1: Format
 
-Detect changed file types and run appropriate formatters:
+Detect changed file types and run the repository's configured formatters and linters before committing, verification and size measurement:
 
 ```bash
-# Tracked changes + untracked files
+git diff "$BASE"...HEAD --name-only
 git diff --name-only HEAD
 git ls-files --others --exclude-standard
 ```
 
-Only run formatters for file types that actually changed:
-- Ruby files (`.rb`) → `diffocop -A` (if available, else `bundle exec rubocop -A`)
-- JS/TS/CSS files → `pnpm run format:fix && pnpm run lint:fix`
+Only run tools for file types that actually changed. Follow the repository guide and configured package manager/scripts; common commands are:
+- Ruby files (`.rb`) → `diffocop -A` (if available, else the configured RuboCop command)
+- JS/TS/CSS files → `pnpm run format:fix && pnpm run lint:fix` when those scripts exist; otherwise use the repository's configured equivalents
+
+Do not assume every Node repository uses pnpm or add a competing formatter. If no formatter/linter is configured, report that and check readability directly. Formatting does not replace review of control flow and design.
 
 ## Step 2: Stage + Branch
 
@@ -67,6 +71,8 @@ git checkout -b jjholmes927-<descriptive-name>-<TICKET-ID>
 ```
 
 ## Step 3: Commit
+
+Commit only when there are intended uncommitted changes. Already committed work proceeds directly to verification.
 
 Use conventional commit prefixes:
 
@@ -110,16 +116,18 @@ Every ship verifies behaviour before push — UI or not. Invoke **/verify**: it 
    (/verify's Step 4 has the freshness check — run it.)
 2. **Server preflight.** Verify against THIS clone's local dev server (parallel-dev setup), not staging:
    ```bash
-   PORT=$(grep -E '^PORT=' .env.local | cut -d= -f2); PORT=${PORT:-3000}
-   curl -s -o /dev/null -w "%{http_code}" "http://localhost:${PORT}"
+   TARGET_URL=$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-dev-url.py") || exit 1
+   curl -s -o /dev/null -w "%{http_code}" "$TARGET_URL"
    ```
    Not up → start it in the **background** (never run `bin/dev` in the foreground — it blocks) and poll until ready:
    ```bash
-   bin/dev >/tmp/dev-${PORT}.log 2>&1 &
-   for i in $(seq 1 30); do curl -sf -o /dev/null "http://localhost:${PORT}" && break; sleep 2; done
+   DEV_LOG=$(mktemp -t ship-dev)
+   bin/dev >"$DEV_LOG" 2>&1 &
+   for i in $(seq 1 30); do curl -sf -o /dev/null "$TARGET_URL" && break; sleep 2; done
    ```
    A down server is an environment to fix, not a reason to skip. If it genuinely won't boot, that becomes a declared 🔴, never a quiet omission.
-3. **Run /verify scoped to the diff** — exercise only the paths that changed, against `http://localhost:${PORT}` for the UI arm.
+   Read the repository's runtime guide first. The resolver uses `bin/dev-info`'s `APP_URL` when available, then checkout `.env` and `.env.local` values; it never guesses port 3000 or sources environment files. If the project uses another contract, follow it explicitly and record the checkout and target URL. Resolve a missing or failing helper before checking a different server. Server checks are needed only for promises that require that server.
+3. **Run /verify scoped to the diff** — exercise only the paths that changed, against `$TARGET_URL` for the UI arm.
 4. **Real breakage → fix, re-stage, commit, re-verify.** Verification is gating pre-push.
 5. **Gate on the verdict:**
    - ✅ / 🟡 → continue. The evidence lines go in the ship summary.
@@ -131,12 +139,9 @@ Every ship verifies behaviour before push — UI or not. Invoke **/verify**: it 
 
 ## Step 5: Simplify
 
-Before pushing, run `/simplify` to review changed code for reuse opportunities, quality issues, and efficiency improvements. This uses three parallel review agents (code reuse, code quality, efficiency) to catch issues locally before they go remote.
+Before pushing, invoke the available `simplify` skill to review the full branch diff for code reuse, quality and efficiency. If the harness has no such skill, perform those same three checks with its native review tools. Delegate only when the session authorizes it; otherwise review sequentially. If a parent workflow assigns edits to an implementer, return fixes to that implementer.
 
-Invoke the `simplify` skill, which will:
-1. Identify all changes via `git diff`
-2. Launch three parallel review agents
-3. Fix any issues found
+Check structural readability: one statement per line, descriptive intermediate names and guard clauses where they clarify control flow. Reject dense expressions or missing tests introduced to satisfy a size limit. Preserve the repository's comment convention; do not add explanatory comments as a substitute for clear structure. Check bespoke protocol and state-management machinery against the recorded dependency and runtime constraints.
 
 If simplify made changes, stage and create a new commit before proceeding:
 ```bash
@@ -163,10 +168,30 @@ TREE=$(GIT_INDEX_FILE="$IDX" git -C "$TOP" write-tree); rm -f "$IDX"
 ```
 
 - No record and no verify verdict block in this session → /verify never ran. Back to Step 4. Absence of a record is never evidence of "not verifiable".
-- Record found → push.
+- Record found → continue to the PR readiness and size gates below.
 - No record and the Step 4 verdict was ✅/🟡 → something changed after verification (a simplify edit, a formatter, a late fix). **Do not push.** Re-run /verify on the current tree, then re-check.
 - No record because Step 4 ended in a declared 🔴 not-verifiable → the existing 🔴 SHOUT path applies; push is allowed only with the `🔴 NOT VERIFIED LOCALLY` lead line.
 - A `.verify/` directory is local evidence (git-excluded). Never commit it, never delete or hand-write a record to get past the gate — that is forging evidence.
+
+**PR readiness gate (every PR, including each PR in a stack).** Each PR must be an **incrementally releasable, understandable unit of work**: one coherent purpose, enough context to review it, its own acceptance evidence, and a state safe to merge and release after its predecessors even if no successor ever lands. A tested foundation or safely inactive integration can qualify. A PR requiring the next PR to restore working behaviour cannot. Verify each branch at its own tip; tests run only on the final stack do not prove earlier slices. State the slice's purpose, predecessor and release behaviour in the PR description using the existing format.
+
+**Size gate (runs before the push, on the exact diff the PR will show).** Every PR must also contain **at most 500 total added/deleted lines — app code, tests, docs and non-lockfile generated text all count (package-manager lockfiles and schema dumps are excluded from the size gate)**. This is a packaging/stacking rule, never a code-compression rule: do not minify code, combine statements onto one line, remove useful whitespace or omit tests to pass. Measure the formatted, committed code against `$BASE` resolved in Step 0: the actual stack parent for a stacked PR. Do not reset that base to `origin/main`.
+
+```bash
+set -o pipefail
+: "${BASE:?Resolve the PR base in Step 0}"
+git diff --numstat "$BASE"...HEAD | awk -F '\t' '
+  $3 ~ /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|Gemfile\.lock|composer\.lock|Cargo\.lock|db\/schema\.rb)$/ { next }
+  $3 ~ /(^|\/)(spec|test|tests|__tests__)\/|\.(test|spec)\./ { t += $1 + $2; next }
+  $3 ~ /^docs\// { d += $1 + $2; next }
+  { a += $1 + $2 }
+  END { total = a + t + d; printf "app=%d tests=%d docs=%d total=%d\n", a, t, d, total; exit (total > 500) }
+'
+```
+
+- total ≤ 500 AND the PR readiness gate passes → continue; paste the measurement and the slice's release-readiness evidence in the ship summary. The app/tests/docs split is reporting only; tests do not receive a separate allowance.
+- total > 500 OR the slice is not independently releasable/understandable → **do not push or create the PR.** Propose coherent boundaries, then restructure the commits and ship each resulting branch in dependency order with its own formatting, /verify, fingerprint, readiness and size checks. Splitting at an arbitrary commit boundary is insufficient. If no valid split fits the cap, report the constraint and stop rather than silently exempting files or compromising correctness.
+- A failed measurement or unresolved base is not a pass. Re-check both gates after fixes or stack rebases; changed content invalidates verification evidence. Binary changes have no numeric line count in numstat and still require explicit review and verification.
 
 ```bash
 git push -u origin <branch-name>
@@ -178,14 +203,14 @@ If no PR exists yet, create one with `gh pr create`.
 
 Invoke the **`writing-pr-descriptions`** skill and follow it exactly — it owns the format (What / Why), the 3-bullet / 2–3-sentence section caps, and the hard rules (one idea per sentence, outcome not inventory, stack etiquette, no Fixes footer, no attribution).
 
-**If Step 4 produced UI verification screenshots, they go in the PR body — gating.** Use verify-ui's screenshots-branch recipe (private repos can't hot-link CLI-attached images) and include the measurement line under each image. A visual change shipping without its evidence in the body is the same failure as skipping verification: the proof existed and reviewers never saw it (INT-738/INT-742, Aug 2026 — three UI PRs merged screenshot-less while the evidence sat in chat).
+**If Step 4 produced UI verification screenshots, they go in the PR body — gating.** Follow the repository's attachment policy and verify-ui's evidence guidance; include the measurement line under each image. When upload requires a human action, preserve the files and report that pending action. Do not commit screenshots when the repository forbids it.
 
 ### Creating the PR
 
 Write the body to a temp file (Write tool or an editor) and pass it with `--body-file` — never inline the body in `--body "..."` or a heredoc, because backticks in the body get shell-evaluated and mangle it. Capture the new PR's number so Steps 7–8 can use it:
 
 ```bash
-gh pr create --title "feat: Title here [TICKET-ID]" --body-file /tmp/pr-body.md
+gh pr create --base "$PR_BASE_BRANCH" --title "feat: Title here [TICKET-ID]" --body-file /tmp/pr-body.md
 PR_NUMBER=$(gh pr view --json number -q .number)
 ```
 
@@ -210,8 +235,10 @@ If the repo has no CI at all (zero checks after the registration poll), say so i
   2. Fetch the errors:
      - RSpec → use `.claude/skills/fetching-ci-errors/fetch_ci_errors` if present.
      - ESLint / TypeScript / Prettier / other → find the failed run, then view its log: `gh pr checks <PR_NUMBER> --json name,bucket,link --jq '.[]|select(.bucket=="fail").link'`, then `gh run view <run-id> --log-failed` (run-id from that link).
-  3. Fix locally, run to verify, commit (new commit, NOT amend), push.
+  3. Fix locally, run affected tests, commit (new commit, NOT amend), re-run Step 4 for changed behaviour and Step 6's fingerprint/size gates, then push.
   4. Re-run the watch. **Max 3 fix rounds**, then stop and report.
+
+Ship owns this CI repair budget for the entire invocation, including returns from review feedback. Record attempts in the task handoff (or `.e2e/sessions.tsv` when E2E owns the task), preserve the count on resume, and do not restart it in the caller. A parent workflow's stricter failure stop still applies.
 
 A failed check may only be excluded from the gate with evidence — a log showing it's unrelated infra flake, or a re-run that passes. "Probably a flake" on an empty log is not evidence.
 
@@ -240,7 +267,7 @@ Code review now runs automatically in CI: the `AI code review` workflow posts a 
    (The AI review posts one sticky issue-comment marked `<!-- ai-code-review -->`; Bugbot posts inline review comments.)
 
 3. Triage every finding from both sources together:
-   - Valid + worth fixing → fix locally, commit (new commit), push.
+   - Valid + worth fixing → fix locally, run affected tests, commit (new commit), repeat Step 4 verification and Step 6's fingerprint/size gates, then push.
    - False positive / too noisy → skip.
 
 4. After fixing, re-watch CI (Step 7). The CI review re-runs on the new push and refreshes its sticky comment; re-collect once more if you pushed fixes. **Cap at 2 review rounds** — don't chase every bot re-scan (diminishing returns).
@@ -251,6 +278,10 @@ Code review now runs automatically in CI: the `AI code review` workflow posts a 
 - Fingerprint gate finds no record for the current tree, and Step 4 did not end in a declared 🔴 not-verifiable → the code changed after verification (or was never verified); re-verify, do not push
 - "The only change since verify was a formatter / a comment" → re-verify anyway; the gate is content-based, not judgement-based
 - Verification quietly skipped (missing tool, down server) → install the tool / start the server, or declare 🔴 loudly — silence is prohibited
+- Size gate shows total > 500 (tests, docs and non-lockfile generated text included) → do not push or open the PR; restructure into coherent releasable increments
+- Slice is under 500 lines but needs a later PR to work → do not ship it; revise the boundaries
+- Compressing code or dropping tests to fit the cap → restore readability and coverage, then revise the boundaries
+- "It's mostly tests" / "the app code is only 200 lines" → tests count; the reviewer reads the whole diff
 - About to push to `main` directly → create a branch first
 - About to force-push → ask user for confirmation
 - No changes detected → do not create empty commits
