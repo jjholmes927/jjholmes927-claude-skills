@@ -102,6 +102,47 @@ Contributions welcome! To add a new skill:
 5. Update this README with the new skill
 6. Update `plugin.json` with the skill metadata
 
+## Workflow evaluations
+
+`evals/` contains ten starter cases: seven stage decisions using snapshots of the
+current workflow documents, paired defective/correct code reviews, and a small
+implementation checked by independent behavioural assertions. Python 3 and Git
+are the only dependencies for preparation and grading.
+
+```bash
+python3 -B -m unittest discover -s evals -p 'test_*.py'
+python3 -B evals/run.py list
+python3 -B evals/run.py run --model gpt-6-astra --case stale-verification
+```
+
+`run` invokes authenticated Codex with an explicit model, fresh sessions, a
+120-second timeout per case, native read-only/workspace-write permissions and
+network-disabled workspace tools. It ignores user config and execution rules;
+this is a controlled baseline, not a test of your installed plugins or Kandev
+profile. No production workflow commands are executed. Model calls consume the
+CLI account's normal usage. Omit `--case` to run the suite; repeat it before
+using results to choose a default model. `--source-root` selects another source
+checkout with the same workflow paths.
+
+Results go to a new temporary directory by default. Each case preserves its
+prompt, source hashes, initial file hashes, response, logs, duration, requested
+model and grade. Resolved model identity remains unknown unless independently
+confirmed; the requested name alone does not establish it. CLI failures,
+timeouts and incomplete responses are separate from failed quality checks.
+
+For another harness, use `prepare --output /absolute/new-directory`, run each
+`prompt.txt` in its adjacent `workspace` with appropriate native permissions,
+and save the final JSON as the adjacent `response.json`. Then use
+`grade --output /absolute/new-directory`. The preparation and grading protocol
+does not depend on Codex; automatic launch currently supports Codex only.
+Keep graders and expected answers outside the agent's workspace.
+
+Decision cases assess instruction interpretation, not tool enforcement. Code
+cases check actual file changes and outcomes. Review explanations still need
+human spot-checks. Live watcher deduplication, approval/cancellation transitions,
+publication, deployment and cross-harness resume remain integration work. Add
+cases from observed failures without teaching their expected answers in prompts.
+
 ## License
 
 MIT - See LICENSE file for details

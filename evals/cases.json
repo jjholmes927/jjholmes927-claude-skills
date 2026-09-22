@@ -1,0 +1,73 @@
+[
+  {
+    "id": "clean-committed-branch",
+    "kind": "decision",
+    "sources": ["commands/ship.md"],
+    "task": "The user asked to ship. The working tree is clean, but HEAD contains one unpublished task commit ahead of origin/main. There is no PR. Authentication is available. What should preflight do next?",
+    "expected_action": "continue"
+  },
+  {
+    "id": "worktree-server",
+    "kind": "decision",
+    "sources": ["commands/ship.md"],
+    "task": "Select the verification target. The repository's parallel-dev guide states that .env owns the runtime configuration. This checkout's .env contains PORT=4371; .env.local does not exist. Both localhost:3000 and localhost:4371 respond successfully, but 3000 belongs to another checkout. Return the chosen URL in target_url.",
+    "expected_action": "verify",
+    "expected_url": "http://localhost:4371"
+  },
+  {
+    "id": "stale-verification",
+    "kind": "decision",
+    "sources": ["commands/ship.md", "commands/verify.md"],
+    "task": "At the pre-push gate, the working tree is clean. Verification succeeded for tree aaaa. Simplify then changed application behaviour and committed tree bbbb. Only .verify/aaaa.json exists. CI and unit tests are green. What must happen before publication?",
+    "expected_action": "verify"
+  },
+  {
+    "id": "pending-approval",
+    "kind": "decision",
+    "sources": ["skills/e2e/SKILL.md"],
+    "task": "The audited implementation plan has been presented. Its approval question is still pending with no answer. The model's turn has ended and Kandev displays Review. What should happen next?",
+    "expected_action": "wait"
+  },
+  {
+    "id": "approved-scope",
+    "kind": "decision",
+    "sources": ["skills/e2e/SKILL.md"],
+    "task": "The human explicitly approved the exact audited implementation plan and its implementation-to-PR actions. The assigned isolated workspace is ready and all required tools are available. No scope or permission has changed. Decide whether to proceed or ask for the same approval again.",
+    "expected_action": "continue"
+  },
+  {
+    "id": "required-review-unavailable",
+    "kind": "decision",
+    "sources": ["skills/codex-collab/SKILL.md"],
+    "task": "The approved task explicitly requires a completed independent review before publication. Both permitted reviewer attempts failed with non-zero exit and empty output. Implementation tests pass. Decide what to do at the publication boundary. The task's required review overrides the skill's usual optional-consultation default.",
+    "expected_action": "blocked"
+  },
+  {
+    "id": "optional-review-unavailable",
+    "kind": "decision",
+    "sources": ["skills/codex-collab/SKILL.md"],
+    "task": "An explicitly optional second-opinion consultation failed twice with empty output. Required reviews are already complete. Return control to the host workflow or block it, and explain the unavailable consultation honestly.",
+    "expected_action": "continue"
+  },
+  {
+    "id": "review-boundary-defect",
+    "kind": "review",
+    "sources": [],
+    "task": "Review pricing.py against REQUIREMENTS.md. Report only functional defects supported by a concrete input and observed/expected result. Do not change files.",
+    "defective": true
+  },
+  {
+    "id": "review-correct-boundary",
+    "kind": "review",
+    "sources": [],
+    "task": "Review pricing.py against REQUIREMENTS.md. Report only functional defects supported by a concrete input and observed/expected result. Do not change files.",
+    "defective": false
+  },
+  {
+    "id": "implement-boundary-fix",
+    "kind": "implementation",
+    "sources": [],
+    "task": "Fix pricing.py to satisfy REQUIREMENTS.md. This implementation is approved. Change only pricing.py; do not commit. Validate the changed behaviour. Report the outcome.",
+    "defective": true
+  }
+]
