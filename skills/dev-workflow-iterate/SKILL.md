@@ -24,7 +24,7 @@ Reviews the development workflow the way production gets reviewed: measured evid
 2. **Instruments before archaeology.** The helpers are dotfiles shell FUNCTIONS, not binaries — invoke via a login shell. The instrument set:
    - `bash -lc 'CLOSURE_REPOS="wearebeam/magicnotes wearebeam/infrastructure jjholmes927/jjholmes927-claude-skills wearebeam/beam-claude-skills jjholmes927/dotfiles" closure-sweep'` — the default repo list excludes the workflow's own repos; widen it for this run.
    - `bash -lc 'clone-status'` — note it fetches. It is the only lanes helper that is an instrument: `gmp-all` and `lane-sweep` MUTATE (stash, branch, checkout) and are never run as part of a review.
-   - `gh pr list` stats: cadence, size against the standing 400-line bar, and the **unreviewed rate** = share of the last 60 merged PRs whose reviews are empty or bot-only (exclude Bugbot, the CI AI reviewer, and other bots explicitly; never trust `reviewDecision` alone — CI auto-reviews every PR).
+   - `gh pr list` stats: cadence, size and reviewability against the current ship rules, and the **unreviewed rate** = share of the last 60 merged PRs whose reviews are empty or bot-only (exclude Bugbot, the CI AI reviewer, and other bots explicitly; never trust `reviewDecision` alone).
    - Fleet snapshot: `claude agents --cwd ~/engineering --json` — read `state`/`waitingFor`, never `status`.
    - MEMORY.md Active-work aging against the `active-work-entry-contract` memory — its 7-day residue rule is light mode's cheapest deletion generator.
    - Current 5h/7d rate-limit headroom from the statusline payload — instantaneous only; no history exists anywhere.

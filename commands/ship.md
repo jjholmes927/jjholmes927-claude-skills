@@ -32,7 +32,7 @@ git status --porcelain         # Uncommitted work, if any
 gh auth status                 # GitHub CLI is authenticated
 ```
 
-Resolve the PR base (the existing PR's base, the stack parent, or `origin/main`) as `$BASE` and verify the ref exists. Inspect both `git diff "$BASE"...HEAD` and uncommitted work. A clean working tree with committed, unpublished changes must continue through verification and publication. Stop for no work only when both are empty; do not create an empty commit. If the base is unavailable, resolve it before deciding there is no work.
+Resolve the PR base (the existing PR's base, the stack parent, or the repository's actual default branch) as `$BASE` and verify the ref exists. Do not assume the default is `main`; inspect repository metadata. Inspect both `git diff "$BASE"...HEAD` and uncommitted work. A clean working tree with committed, unpublished changes must continue through verification and publication. Stop for no work only when both are empty; do not create an empty commit. If the base is unavailable, resolve it before deciding there is no work.
 
 Record the corresponding GitHub base branch name as `$PR_BASE_BRANCH` (for example, `main` for `origin/main`). For a stack, publish predecessors first and use the immediate parent branch as the next PR's base; creating every PR against the default branch would measure and publish different diffs.
 
@@ -106,8 +106,7 @@ Every ship verifies behaviour before push — UI or not. Invoke **/verify**: it 
 
 1. **Tooling preflight — repair, don't skip.** If the diff touches UI paths:
    ```bash
-   git fetch origin main -q 2>/dev/null
-   git diff origin/main...HEAD --name-only | grep -E '\.(tsx?|jsx?|css|scss)$|^app/javascript/|^app/views/|^app/components/'
+   git diff "$BASE"...HEAD --name-only | grep -E '\.(tsx?|jsx?|css|scss)$|^app/javascript/|^app/views/|^app/components/'
    ```
    and agent-browser is missing or stale, **install/update it now** — do not skip UI verification because the tool is absent:
    ```bash
@@ -244,7 +243,7 @@ A failed check may only be excluded from the gate with evidence — a log showin
 
 ## Step 8: Consolidate review feedback
 
-Code review now runs automatically in CI: the `AI code review` workflow posts a four-agent + correctness comment, and Cursor Bugbot posts its own. **Don't run `/review-pr` locally** — wait for both and act on their combined output.
+Inspect the repository's configured review automation. Where present, the `AI code review` workflow and Cursor Bugbot post findings; wait for those configured checks and consolidate their output rather than duplicating the review locally. If neither is configured, report that and retain the reviews already required by the parent workflow; do not invent a bot gate.
 
 1. Wait for both review bots to post — they often start only after CI is green. Poll, bounded to ~3 minutes:
    ```bash
