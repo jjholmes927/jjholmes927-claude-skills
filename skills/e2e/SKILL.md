@@ -27,6 +27,7 @@ The approved plan records the execution/review routes, identities, permissions a
 
 ## Boundaries and dependencies
 
+- At preflight, run `workflow-doctor` once when available on PATH; report drift warnings and refresh commands without auto-updating or adding an approval gate. If unavailable, state that local drift was not checked. This optional read-only check also works in dry-run and does not replace any required evidence.
 - One plan approval gate; reuse explicit approval for the same plan/scope. Never proceed while a question is pending or manufacture approval from a timeout, turn ending or cancellation.
 - Two execution failures at a stage stop the run; preserve the workspace and report the task, sessions and last error. Findings are not execution failures. Record attempts; never reset them on resume.
 - Ship owns verification, publication, CI and feedback loops. No direct push/PR shortcut around ship. Merge and deployment are separate actions.
