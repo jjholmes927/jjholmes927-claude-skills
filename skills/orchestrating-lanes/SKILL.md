@@ -5,6 +5,8 @@ description: Use when the user asks to spin up lanes, orchestrate parallel ticke
 
 # Orchestrating Lanes
 
+> **Note**: Legacy tmux/Fleet orchestrator. For Kandev-managed worktrees, DAG dependencies, and multi-repo waves, prefer `kandev-orchestrate`.
+
 ## Overview
 
 Run parallel bodies of ticket work in separate background Claude sessions ("lanes") via the `new-agent` script (`~/.local/bin/new-agent`), with this session acting as orchestrator: assign tickets, watch for completion, refill free lanes. Lanes are real Fleet sessions, visible in fleet, and take plan approvals directly from the user.

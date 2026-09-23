@@ -40,6 +40,10 @@ Auto-refresh coding guidelines based on codebase patterns, PR reviews, and appro
 
 Full delivery pipeline: Claude/Fable plans with one approval gate, codex/Sol implements each task headlessly with graded reasoning effort, dual review with fix loops, then ship to PR with CI watch.
 
+### 🌊 [Kandev Orchestrate](skills/kandev-orchestrate/)
+
+Coordinates multi-ticket, multi-repo implementation waves across independent Kandev sessions. Manages topological dependencies (`blocked_by` + `start_when_unblocked`), provisions isolated git worktrees via `exec-worktree`, honors the two human approval gates (plan approval and PR merge), and presents a real-time status dashboard. Replaces legacy tmux `orchestrating-lanes`.
+
 ### 🔍 [Investigate](skills/investigate/)
 
 Findings, not code: claims the Linear ticket, ranks hypotheses before hunting evidence, posts a ≤300-word comment where every claim carries a link or record id and every unreachable source is flagged up top, then hands the ticket to In Review. The `agent:investigate` fleet watch runs it as `/investigate <ticket>`.
