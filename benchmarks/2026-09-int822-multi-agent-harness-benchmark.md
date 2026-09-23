@@ -1,25 +1,19 @@
-# Multi-Agent Harness Benchmark: INT-822 Evidence Bundle Caching (v1 & v2)
+# Multi-Agent Benchmark: INT-822 Evidence Bundle Caching (v1 & v2)
 
-**Date:** September 22–23, 2026  
-**Target Repository:** [`wearebeam/interpret-investigator-agent`](https://github.com/wearebeam/interpret-investigator-agent)  
-**Ticket:** [INT-822](https://linear.app/beam/issue/INT-822) — *Shared evidence bundle caching for Interpret investigator agent*  
-**Parent Project:** [TALK-986](https://linear.app/beamazing/issue/TALK-986) — *Refactor the Interpret agent architecture into a shared runner*  
-**Harnesses Evaluated:** Cursor Desktop, Claude Code (CLI), OpenCode, Codex CLI  
-**Workflow Engine:** `joel-workflow` (migrated from v2.16.0 → v2.20.2 → v2.20.3 → v2.20.4)
+> **TL;DR:** We benchmarked 4 agent harnesses on a real, multi-PR caching ticket ([INT-822](https://linear.app/beam/issue/INT-822)). In v1, our own workflow got in the way—spawning subagents and running adversarial review after every commit wasted hours. After fixing the workflow for v2, **Cursor (Opus 5.5 + Luna review) won in 28 minutes**, delivering 3 clean PRs ([#46](https://github.com/wearebeam/interpret-investigator-agent/pull/46), [#47](https://github.com/wearebeam/interpret-investigator-agent/pull/47), [#48](https://github.com/wearebeam/interpret-investigator-agent/pull/48)) that merged straight to `main`. Unconstrained review was the biggest time-sink across all runs: Claude Code burned 85 minutes arguing about Docker permissions instead of writing code.
 
 ---
 
-## 1. Context & Benchmark Objective
+## What We Tested
 
-The Interpret incident investigator agent runs in containerized environments to triage and diagnose conversation failures across production. Historically, each agent run fetched multi-megabyte payloads (Honeycomb spans, BigQuery telemetry, and audio trace bundles) multiple times per incident, generating redundant API load, rate-limiting failures, and latency spikes.
+* **Target Repo:** [`wearebeam/interpret-investigator-agent`](https://github.com/wearebeam/interpret-investigator-agent)
+* **Ticket:** [INT-822](https://linear.app/beam/issue/INT-822) (under parent [TALK-986](https://linear.app/beamazing/issue/TALK-986))
+* **The Problem:** The incident investigator agent repeatedly fetched multi-megabyte payloads (Honeycomb spans, BigQuery logs, audio traces) for the same incident, hitting rate limits and adding latency.
+* **The Task:** Build a shared disk cache, wrap it in a local MCP server, wire it into the runner, and ship it as a clean stack of PRs ($\le 500$ lines each).
+* **Harnesses:** Cursor Desktop, Claude Code CLI, OpenCode, Codex CLI.
 
-Under **TALK-986**, the team planned to extract a shared runner architecture for both Interpret and Talk agent flows. Ticket **INT-822** was selected as a realistic, non-trivial benchmark problem:
-* It requires architectural design (CLI fetcher, shared filesystem cache, loopback MCP server, runner integration).
-* It enforces strict incremental delivery (multi-PR stack budgeted at $\le 500$ lines per PR).
-* It tests tool integration, process isolation, IPC, and unit testing under concurrency and error conditions.
-
-### The Canonical Benchmark Prompt
-To eliminate prompt drift, all runs across all harnesses were invoked with the exact same prompt:
+### The Benchmark Prompt
+Every harness received this exact prompt:
 ```text
 /e2e INT-822
 Use TALK-986 and its linked delivery plan as the architecture context.
@@ -28,125 +22,98 @@ Carry bundle caching into the planned shared-runner architecture.
 Keep TALK-986 open as the coordination parent.
 ```
 
-The benchmark was executed in two major phases: **v1** (exploratory baseline across harnesses) and **v2** (evaluating workflow remediations and model permutations).
+---
+
+## Phase 1 (v1): What Happened in the Baseline
+
+On the morning of September 22, 2026, we ran the prompt across three harnesses using `joel-workflow` v2.16.0:
+1. **Codex CLI v1** (GPT-6 Astra / Sol) → 3 PRs ([#26](https://github.com/wearebeam/interpret-investigator-agent/pull/26), [#27](https://github.com/wearebeam/interpret-investigator-agent/pull/27), [#28](https://github.com/wearebeam/interpret-investigator-agent/pull/28))
+2. **Claude Code v1** (Fable coordinator + Codex Sol implementer) → 2 PRs ([#30](https://github.com/wearebeam/interpret-investigator-agent/pull/30), [#31](https://github.com/wearebeam/interpret-investigator-agent/pull/31))
+3. **OpenCode v1** (GPT-6 Astra) → Stalled on git worktrees and PR publishing.
+
+### How Each Model Built the Code
+* **Codex v1** sliced the problem cleanly into 3 layers: cache store, evidence tools, and runner integration. But it missed basic failure tests (corrupted cache files, concurrent writes, network drops).
+* **Claude Code v1** squashed everything into 2 PRs and pasted a duplicate copy of the stdio JSON-RPC MCP envelope instead of reusing existing helpers.
+* **OpenCode v1** tripped over git worktrees and couldn't finish delivering the stack.
+
+### What Was Slowing Down Our Workflow
+The models weren't the real problem in v1. Our own workflow was:
+1. **Hardcoded model names:** `/e2e` only knew "fable" and "sol", so running another model was brittle.
+2. **Subagents wasted 3–5 minutes per task:** Spawning a headless subagent for every task added minutes of disk and process overhead, even when the code took seconds to write.
+3. **Reviewing every commit killed momentum:** Running an adversarial review after every single task commit caused constant stop-and-go friction.
+4. **Stacked PR delays:** `ship` forced a 3-minute wait for bot reviews on intermediate PRs, dragging delivery out for hours.
 
 ---
 
-## 2. Phase 1 (v1): Baseline Exploration & Pathology Discovery
+## What We Changed Between v1 and v2
 
-On the morning of September 22, 2026, the identical prompt was dispatched across three distinct harnesses running under `joel-workflow` v2.16.0:
-1. **Codex CLI v1** (GPT-6 Astra / Sol implementer)
-2. **Claude Code v1** (Claude Fable coordinator + Codex Sol headless implementer)
-3. **OpenCode v1** (GPT-6 Astra coordinator & implementer)
+We overhauled `joel-workflow` (v2.16.0 → v2.20.4) before running the bake-off again:
 
-### Summary of v1 Pull Requests
-- **Codex v1**: 3 PRs ([#26](https://github.com/wearebeam/interpret-investigator-agent/pull/26), [#27](https://github.com/wearebeam/interpret-investigator-agent/pull/27), [#28](https://github.com/wearebeam/interpret-investigator-agent/pull/28))
-- **Claude Code v1**: 2 PRs ([#30](https://github.com/wearebeam/interpret-investigator-agent/pull/30), [#31](https://github.com/wearebeam/interpret-investigator-agent/pull/31))
-- **OpenCode v1**: Stalled during multi-PR delivery and review synchronization; failed to produce a complete releasable stack.
-
-### What v1 Revealed
-
-#### A. Architecture & Code Slicing Variance
-* **Codex v1**: Exhibited the cleanest modular slicing. It naturally broke the problem into 3 discrete layers: (1) shared cache store, (2) verified evidence tools, and (3) pre-investigation runner wiring. However, its test suite lacked depth on boundary failure modes (corrupted cache JSON, concurrent writers, network timeouts).
-* **Claude Code v1**: Compressed the entire solution into only 2 PRs. It suffered from notable code duplication—implementing a third redundant copy of the stdio JSON-RPC MCP envelope instead of reusing existing helpers in `mcp/slack-server.mjs` and `mcp/linear-server.mjs`.
-* **OpenCode v1**: Had difficulty managing the git worktree lifecycle and Kandev PR publishing commands, highlighting gaps in harness portability.
-
-#### B. Workflow & Harness Friction in v1
-A deep audit of the v1 runs exposed critical systemic flaws in the existing `joel-workflow` v2.16.0 pipeline:
-1. **Model Name Hardcoding**: `/e2e` hardcoded Fable as the sole planner and Sol (Codex) as the sole implementer, making it brittle when run under other harnesses (OpenCode, Codex CLI, Cursor).
-2. **The Subagent Serialization Penalty**: For every individual task in the plan, the coordinator serialized prompts to disk, spawned `e2e-codex.sh`, captured JSONL logs, and parsed output. This added 3–5 minutes of idle wrapper overhead per task even when code generation was instantaneous.
-3. **Inner-Loop Reviewer Pauses**: `/e2e` dispatched an independent reviewer subagent after *every single task commit*. This forced constant context re-loading and resulted in excessive review latency for routine, mechanical code.
-4. **Multi-PR Delivery Delays**: `ship.md` enforced a mandatory 3-minute review-bot polling delay on intermediate stack PRs, causing multi-PR delivery to drag out needlessly.
-
----
-
-## 3. What We Changed in Between (v1 → v2 Evolution)
-
-Between v1 and v2, we redesigned the workflow to eliminate artificial harness friction, improve cross-model portability, and accelerate delivery. These changes were packaged and published as **`joel-workflow` v2.20.2 → v2.20.4**:
-
-| Dimension | v1 Approach (`joel-workflow` 2.16) | v2 Approach (`joel-workflow` 2.20.4) | Why Changed |
+| Area | v1 (`joel-workflow` 2.16) | v2 (`joel-workflow` 2.20.4) | Why |
 |---|---|---|---|
-| **Execution Policy** | Mandatory headless subagent delegation (`e2e-codex.sh`) per task | Direct in-session implementation by default (`--execution direct`) | Eliminates JSON-RPC/file IPC overhead and context serialization lag. |
-| **Execution Roles** | Hardcoded model nicknames (`fable`, `sol`) | Abstract roles: `Coordinator`, `Implementer`, `Reviewer` | Allows any model or harness (Cursor, OpenCode, Codex, Claude) to fill any role. |
-| **Review Timing** | Inner loop: Independent subagent review dispatched after *every task* | Consolidated: Stage-6 branch diff review (`base...HEAD`) | Stops constant stop-and-go review cycles on intermediate WIP commits. |
-| **Plan Audit Cap** | Unbounded multi-round debate between planner & auditor | Strict 1-round audit cap; coordinator presents dispositions at human gate | Prevents infinite planning loops and scope expansion before coding starts. |
-| **Review Scope Bounds** | Unconstrained adversarial scrutiny | **Architectural Observation Rule**: Platform/infra limits logged as non-blocking | Stops reviewers from blocking application PRs on preexisting container/host security limitations. |
-| **Model Shorthands** | Rigid environment variable flags | Added `--direct`, `--impl <model>`, `--review <model>` with automatic alias resolution | Simplifies orchestrating cross-model bake-offs (e.g. `--review luna`). |
-| **Stack Delivery** | 3-minute bot polling pause on each PR in a stack | Stack-aware delivery; skip bot pauses on intermediate PRs; async merge handling | Prevents multi-PR delivery from blocking on intermediate dependencies. |
+| **Execution** | Headless subagent per task | Direct in-session (`--execution direct`) | Cuts 3–5 min process startup per task. |
+| **Roles** | Hardcoded model nicknames (`fable`, `sol`) | Abstract roles (`Coordinator`, `Implementer`, `Reviewer`) | Any model/harness can fill any role. |
+| **Review Timing** | After every task commit | Consolidated branch diff review at Stage 6 | Stops review thrash on unfinished WIP commits. |
+| **Plan Audits** | Endless debate rounds | Capped at 1 round; human gate decides | Stops agents arguing over plans before coding. |
+| **Review Scope** | Anything goes | **Architectural Observation Rule** | Flags host/container security as notes, not blockers. |
+| **Stack Delivery** | 3-minute pause per PR | Fast stack shipping; skip pauses on middle PRs | Intermediate PRs don't block the stack. |
 
 ---
 
-## 4. Phase 2 (v2): The Multi-Agent Bake-Off
+## Phase 2 (v2): The Bake-Off
 
-With the updated workflow in place, we re-ran the identical INT-822 prompt across four harness and model topologies on the evening of September 22:
-
-1. **Codex CLI v2**: Sol/Astra headless execution ([PRs #33–#35](https://github.com/wearebeam/interpret-investigator-agent/pull/33))
-2. **OpenCode v2**: GPT-6 Astra coordinator/implementer ([PRs #36–#40](https://github.com/wearebeam/interpret-investigator-agent/pull/36))
-3. **Claude Code v2**: Fable coordinator + Codex Astra implementer/adversary ([PRs #41–#45](https://github.com/wearebeam/interpret-investigator-agent/pull/41))
-4. **Cursor (Winner)**: Opus 5.5 direct coordinator/implementer + GPT-6 Luna reviewer ([PRs #46–#48](https://github.com/wearebeam/interpret-investigator-agent/pull/46))
-
-### Cross-Harness Comparison Matrix (v2)
+We re-ran the identical prompt with the updated workflow across four setups:
 
 | Metric | Cursor (Winner) | Claude Code v2 | OpenCode v2 | Codex CLI v2 |
 |---|---|---|---|---|
-| **Topology** | In-session direct authoring + out-of-band review | Dual-agent coordinator + headless implementer/auditor | Headless coordinator/implementer | Single-agent CLI worktree flow |
-| **Coordinator** | Claude 3.5 Opus / Opus 5.5 (`opus[1m]`) | Claude Fable (`fable[1m]`) | GPT-6 Astra (`openai/gpt-6-astra`) | GPT-5.6 Sol / GPT-6 Astra |
-| **Implementer** | Opus 5.5 (in-session direct) | Codex Astra (`gpt-6-astra`) | GPT-6 Astra | GPT-5.6 Sol |
-| **Reviewer** | GPT-6 Luna (`gpt-6-luna`) | Codex Astra (`gpt-6-astra`) | GPT-6 Astra (self/audit) | Sol / Astra |
+| **Setup** | In-session direct + out-of-band review | Dual-agent coordinator + subagent reviewer | Headless coordinator/implementer | Single-agent CLI worktree flow |
+| **Coordinator** | Opus 5.5 (`opus[1m]`) | Claude Fable (`fable[1m]`) | GPT-6 Astra | GPT-5.6 Sol / GPT-6 Astra |
+| **Implementer** | Opus 5.5 (direct in-session) | Codex Astra (`gpt-6-astra`) | GPT-6 Astra | GPT-5.6 Sol |
+| **Reviewer** | GPT-6 Luna (`gpt-6-luna`) | Codex Astra (`gpt-6-astra`) | GPT-6 Astra (self-audit) | Sol / Astra |
 | **PR Output** | **3 clean PRs** ([#46](https://github.com/wearebeam/interpret-investigator-agent/pull/46), [#47](https://github.com/wearebeam/interpret-investigator-agent/pull/47), [#48](https://github.com/wearebeam/interpret-investigator-agent/pull/48)) | 5 PRs ([#41](https://github.com/wearebeam/interpret-investigator-agent/pull/41)–[#45](https://github.com/wearebeam/interpret-investigator-agent/pull/45)) | 5 PRs ([#36](https://github.com/wearebeam/interpret-investigator-agent/pull/36)–[#40](https://github.com/wearebeam/interpret-investigator-agent/pull/40)) | 3 PRs ([#33](https://github.com/wearebeam/interpret-investigator-agent/pull/33)–[#35](https://github.com/wearebeam/interpret-investigator-agent/pull/35)) |
-| **Outcome** | **Merged cleanly to `main`** | Closed (scope creep) | Closed (review idle) | Closed (superseded) |
-| **Total Wall-Clock** | **~28 minutes** | ~115 minutes | ~65 minutes | ~42 minutes |
-| **Dominant Latency** | Active code authoring & verify | **85m+ debate on host container UID security** | **45m spent across 4 clean reviews** | Manual stack stitching & CLI polling |
+| **Result** | **Merged cleanly to `main`** | Closed (scope creep) | Closed (review idle) | Closed (superseded) |
+| **Total Time** | **28 minutes** | 115 minutes | 65 minutes | 42 minutes |
+| **Where Time Went** | Writing code & running tests | **85 min debating Docker UID permissions** | **45 min running 4 clean reviews** | Manual stack stitching & CLI polling |
 
 ---
 
-## 5. Detailed Failure Mode Analysis in v2
+## What Broke and What Worked in v2
 
-### A. The "Adversarial Tax" & Scope Creep: Claude Code v2 (Fable + Astra)
-In the Claude Code v2 run, implementation of the initial cache logic was fast and accurate. However, during adversarial review:
-* Astra identified that running the agent within the existing runner container gave the agent process read access to container environment variables.
-* Fable accepted this as a blocking defect and expanded task scope into modifying container user permissions.
-* The two agents spent **85 minutes** arguing about Docker UID namespaces, user switching, and file permissions, eventually authoring [PR #45](https://github.com/wearebeam/interpret-investigator-agent/pull/45) (*"Run Claude as a separate user so it cannot read harness secrets"*).
-* **Impact**: Blew out the ticket scope from 3 PRs to 5 PRs, wasted millions of tokens, and stalled delivery on platform infrastructure outside INT-822.
+### 1. Claude Code v2: The Review Rabbit Hole (85 min wasted)
+Claude Code wrote good caching code quickly. But during review, Astra noticed the agent ran as the same user as the container and could read environment variables. Fable treated this as a blocking bug. 
+The two agents spent 85 minutes debating Docker user permissions and authoring an out-of-scope PR ([PR #45](https://github.com/wearebeam/interpret-investigator-agent/pull/45)). A 3-PR ticket blew out to 5 PRs and burned millions of tokens on infrastructure that had nothing to do with INT-822.
 
-### B. Redundant Review Ceremony: OpenCode v2 (GPT-6 Astra)
-* OpenCode v2 successfully authored modular code across 5 PRs.
-* However, OpenCode's internal harness mechanics triggered redundant audit routines after every stage.
-* 4 consecutive review cycles returned `READY` (0 defects found), yet each review required full context re-hydration and prompt processing.
-* **Impact**: **45 minutes** of pure idle wait time for reviews that generated zero actionable diff changes.
+### 2. OpenCode v2: 45 Minutes of Empty Reviews
+OpenCode wrote modular code across 5 PRs, but its harness ran redundant review cycles after every step. Four reviews in a row came back clean (`READY`, 0 defects), but each pass took 10+ minutes to re-read files and process prompts. 45 minutes were lost waiting for reviews that changed nothing.
 
-### C. The Winning Formula: Cursor (Opus 5.5 + Luna)
-* **Direct Execution**: Opus 5.5 implemented the 3-PR stack in-session without subagent serialization delay. It adhered strictly to the repository conventions and shared existing MCP patterns.
-* **Sharp, Non-Blocking Cross-Model Review**: Luna (`gpt-6-luna`) reviewed the complete branch diff (`base...HEAD`). Luna identified genuine boundary conditions (cache corruption recovery, handling partial JSON streams) without hallucinating infrastructure requirements.
-* **Outcome**: 3 PRs ([#46](https://github.com/wearebeam/interpret-investigator-agent/pull/46), [#47](https://github.com/wearebeam/interpret-investigator-agent/pull/47), [#48](https://github.com/wearebeam/interpret-investigator-agent/pull/48)) merged cleanly in order to `main` with green CI.
+### 3. Cursor (Opus 5.5 + Luna): The Winning Combo (28 min total)
+* **Direct authoring:** Opus 5.5 wrote the 3 PRs directly in the session. No subagent startup delays, no lost context, and clean reuse of existing repo helpers.
+* **Sharp cross-model review:** Luna reviewed the final branch diff (`base...HEAD`). Luna caught real edge cases (cache corruption, partial JSON streams) without inventing platform security requirements.
+* **Outcome:** Clean 3-PR stack merged straight to `main` with green CI.
 
 ---
 
-## 6. Key Learnings & Strategic Takeaways
+## Key Takeaways
 
-1. **Raw Code Generation is Solved; Review Protocol is the Bottleneck**: Across all v1 and v2 runs, writing Python/JS code and running tests took <20% of wall-clock time. Multi-agent debate loops and subagent IPC accounted for >80% of latency.
-2. **Unconstrained Adversarial Loops Attack Trust Boundaries**: When given open-ended instructions to find defects, models inevitably attack the environment, host operating system, or platform security model rather than ticket acceptance criteria. The **Architectural Observation Rule** is essential to keep agents on track.
-3. **Cross-Model Review is Superior to Self-Review**: Opus 5.5 + Luna 6 provided the highest signal-to-noise ratio. Luna caught real concurrency and cache-invalidation edge cases that Opus missed, while avoiding the dogmatic rabbit holes that Astra fell into.
-4. **Direct Execution Trumps Subagent Chains**: For tasks of moderate complexity, in-session direct implementation by a frontier model (Opus 5.5) consistently beats multi-subagent pipelines by avoiding serialization loss and IPC friction.
+1. **Writing code is fast; reviews are the bottleneck.** Writing code and running unit tests took under 20% of the total time. Review loops and subagent startup took more than 80%.
+2. **Uncapped reviews attack platform boundaries.** If you give a reviewer an open-ended goal to "find bugs", it will attack the host machine, container security, or OS settings instead of the ticket. The **Architectural Observation Rule** keeps reviewers on topic.
+3. **Cross-model review beats self-review.** Opus 5.5 writing code and Luna 6 reviewing it gave the best results. Luna found genuine concurrency bugs that Opus missed, without going down Astra's rabbit holes.
+4. **In-session coding beats subagents.** Spawning subagents for simple tasks adds latency and loses nuance. A strong frontier model (Opus 5.5) working directly in-session is faster and cleaner.
 
 ---
 
-## 7. Playbook for Future Model & Harness Bake-Offs
+## How to Run Future Bake-Offs
 
-When benchmarking future model generations (e.g. testing next-gen Opus, GPT-6 iterations, or local open-weights models) or new agent harnesses:
+When testing new models or harnesses:
 
-1. **Task Selection**:
-   - Must be a multi-PR distributed system task with external protocol integration (e.g. MCP, CLI, REST) and architectural dependencies. Avoid toy algorithmic problems.
-2. **Execution Standardization**:
-   - Use the canonical prompt format linking parent coordination issues and explicit acceptance criteria.
-   - Run in an isolated git worktree via `kandev_worktree_setup.sh`.
-3. **Telemetry Tracking**:
-   - Record exact wall-clock timestamps for:
-     1. Planning completion & Human gate (`t_plan`)
-     2. Task implementation completion (`t_impl`)
-     3. Review and repair loop (`t_review`)
-     4. Publication and CI verification (`t_ship`)
-4. **Evaluation Metrics**:
-   - **Signal-to-Noise Ratio (SNR)**: Valid defects caught vs out-of-scope/hallucinated blockers.
-   - **Diff Economy**: Smallest sufficient diff satisfying acceptance criteria without stripping tests.
-   - **Wall-Clock Latency**: Time to green merged stack.
+1. **Pick the right task:** Use a multi-PR stack with external tools (MCP, CLI, APIs). Don't use toy one-file tasks.
+2. **Keep the prompt identical:** Use the standard `/e2e <TICKET>` prompt with clear parent ticket context.
+3. **Track real milestones:**
+   * `t_plan`: Plan approved at human gate
+   * `t_impl`: Code written and tests passing
+   * `t_review`: Review feedback resolved
+   * `t_ship`: PRs opened and merged
+4. **Judge on three things:**
+   * **Signal-to-noise:** Did the reviewer catch real bugs, or hallucinate platform problems?
+   * **PR quality:** Small, clean PRs with good tests vs. bloated diffs.
+   * **Wall-clock time:** Time from prompt to merged code.
