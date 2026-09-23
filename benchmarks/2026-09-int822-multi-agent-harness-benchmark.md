@@ -10,7 +10,9 @@
 * **Ticket:** [INT-822](https://linear.app/beam/issue/INT-822) (under parent [TALK-986](https://linear.app/beamazing/issue/TALK-986))
 * **The Problem:** The incident investigator agent repeatedly fetched multi-megabyte payloads (Honeycomb spans, BigQuery logs, audio traces) for the same incident, hitting rate limits and adding latency.
 * **The Task:** Build a shared disk cache, wrap it in a local MCP server, wire it into the runner, and ship it as a clean stack of PRs ($\le 500$ lines each).
-* **Harnesses:** Cursor Desktop, Claude Code CLI, OpenCode, Codex CLI.
+* **Control Plane:** We used **Kandev** to easily control each CLI interface, spin up isolated git worktrees, dispatch runs, and monitor session outputs side-by-side.
+* **Harnesses & Models:** Cursor Desktop, Claude Code CLI, OpenCode, Codex CLI.
+* **Workflow & Skills:** Whenever we refer to "workflow" in this report, we mean Joel's package of workflow skills (`joel-workflow` under `jjholmes927`) combined with our core team skills (`beam-claude-skills`), ported across harnesses using our dotfiles adapters (`/e2e`, `/ship`, `/verify`, `/review-pr`).
 
 ### The Benchmark Prompt
 Every harness received this exact prompt:
@@ -26,7 +28,7 @@ Keep TALK-986 open as the coordination parent.
 
 ## Phase 1 (v1): What Happened in the Baseline
 
-On the morning of September 22, 2026, we ran the prompt across three harnesses using `joel-workflow` v2.16.0:
+On the morning of September 22, 2026, we ran the prompt across three harnesses using our shared skills package (`joel-workflow` v2.16.0), controlled via Kandev:
 1. **Codex CLI v1** (GPT-6 Astra / Sol) → 3 PRs ([#26](https://github.com/wearebeam/interpret-investigator-agent/pull/26), [#27](https://github.com/wearebeam/interpret-investigator-agent/pull/27), [#28](https://github.com/wearebeam/interpret-investigator-agent/pull/28))
 2. **Claude Code v1** (Fable coordinator + Codex Sol implementer) → 2 PRs ([#30](https://github.com/wearebeam/interpret-investigator-agent/pull/30), [#31](https://github.com/wearebeam/interpret-investigator-agent/pull/31))
 3. **OpenCode v1** (GPT-6 Astra) → Stalled on git worktrees and PR publishing.
@@ -47,7 +49,7 @@ The models weren't the real problem in v1. Our own workflow was:
 
 ## What We Changed Between v1 and v2
 
-We overhauled `joel-workflow` (v2.16.0 → v2.20.4) before running the bake-off again:
+We overhauled our shared skills suite (`joel-workflow` v2.16.0 → v2.20.4 across `jjholmes927` and Beam skills) before running the bake-off again:
 
 | Area | v1 (`joel-workflow` 2.16) | v2 (`joel-workflow` 2.20.4) | Why |
 |---|---|---|---|
