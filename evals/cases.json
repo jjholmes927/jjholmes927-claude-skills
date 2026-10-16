@@ -47,6 +47,15 @@
     "expected_action": "continue"
   },
   {
+    "id": "branch-review-lens-missing",
+    "kind": "decision",
+    "sources": [
+      "skills/e2e/SKILL.md"
+    ],
+    "task": "Stage 6 branch review. The good-code-review lens returned two P3 findings. The ponytail-review lens timed out twice and returned nothing. No repairs are pending. Should the coordinator continue to Stage 7 ship, or what is the next action?",
+    "expected_action": "blocked"
+  },
+  {
     "id": "required-review-unavailable",
     "kind": "decision",
     "sources": [

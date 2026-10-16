@@ -38,7 +38,7 @@ Auto-refresh coding guidelines based on codebase patterns, PR reviews, and appro
 
 ### 🚢 [E2E](skills/e2e/)
 
-Full delivery pipeline: Claude/Fable plans with one approval gate, codex/Sol implements each task headlessly with graded reasoning effort, dual review with fix loops, then ship to PR with CI watch.
+Full delivery pipeline: Claude/Fable plans with one approval gate, codex/Sol implements each task headlessly with graded reasoning effort, a branch review with good-code and Ponytail lenses merged into one fix loop, then ship to PR with CI watch.
 
 ### 🌊 [Kandev Orchestrate](skills/kandev-orchestrate/)
 
