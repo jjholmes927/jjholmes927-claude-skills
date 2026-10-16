@@ -69,6 +69,7 @@ Maintain `.e2e/handoff.md` and `.e2e/sessions.tsv` with task/issue, approved pla
 ## Stage 3 — Implement each task
 
 1. Give the implementer the approved task, neighbouring constraints, slice acceptance criteria, dependency/runtime decisions and repository guides. Include: no new explanatory/doc/rationale comments; only machine-required directives and corrections to existing stale comments. Keep one statement per line, descriptive intermediate names and guard clauses where useful. Never compress syntax, strip useful whitespace or omit tests to fit a size limit. Run configured formatting/linting and relevant tests. Do not commit in a delegated task.
+   Also instruct the implementer to follow the `ponytail` skill (the least code that fully solves the task: does it need to exist, is it already in the codebase, the standard library, a platform feature or an installed dependency, and only then the minimum, with one small test for non-trivial logic). Name the skill by its installed path for routes that can't load skills, and scope it to the implementation brief. It never overrides the approved plan, the repository guides or this stage's rules, and validation, error handling, security and accessibility are never cut. If the skill isn't installed, say so in the handoff and continue without it.
 2. Execute through the selected route. Codex: `scripts/e2e-codex.sh run <worktree> <effort> <prompt-file>`; capture its session. Native: send a bounded implementation brief, never `/e2e` or an instruction to orchestrate further agents. Direct: implement in this session within the approved scope. Delegated children cannot change the route or publish.
 3. Record status and observed diff/tests. Nonzero failure, empty/malformed response, or no intended change without evidence the task is already satisfied: one retry with the actual error. Second execution failure stops. Missing credentials/capabilities are blockers, not reasons to burn retries or take over an unauthorized route.
 4. Checkpoint only intended files; preserve unrelated work. Commit with an imperative task message and record the SHA. Native/direct implementation does not require a fictional Codex thread ID.
@@ -84,9 +85,17 @@ Tasks record clean checkpoints with passing tests. Do not dispatch independent r
 ## Stage 6 — Comprehensive branch review
 
 Use the selected fresh reviewer to check the whole branch (`base...HEAD`) against approved scope: task coverage, naming, duplication, dead code, structural readability and complexity justified by runtime/dependency constraints.
+
+**Two lenses, run in parallel**, each in its own fresh read-only reviewer context on the same route and head SHA:
+- **Good code:** the `good-code-review` skill (correct, safe to change, wired up, retry-safe, reads the last release).
+- **Ponytail:** the `ponytail-review` skill (does every line need to exist, and what breaks in the code outside the diff).
+
+Give each reviewer the skill by its installed path when the route can't load skills by name: `good-code-review` sits in this plugin's `skills/` directory, and `ponytail-review` is linked into each harness's `skills/` folder (for example `~/.claude/skills/` or `~/.codex/skills/`). A lens that is missing, fails or times out is recorded as incomplete, never as clean; the review is then not READY, and that gap goes into the final report.
+
+**Merge** both lists before any repair: deduplicate by file:line and root cause, keep the highest severity either lens gave, and note which lens raised each finding. A "this could be cut or simplified" finding is P3 unless the code is dead or duplicated. Never accept a finding that removes validation, error handling, security or accessibility. Record both lenses' identities, head SHA, outcomes and the merged dispositions in `.e2e/handoff.md`.
 1. Require concrete severity, scenario, file/line and evidence; instruct the reviewer to try to refute each finding and verify with executable reproductions in a scratch directory where possible. Apply the **Architectural Observation Rule**: platform/infra limitations outside ticket scope are recorded as non-blocking observations, not blockers.
 2. Check candidate release increments without their successors; a green final stack does not establish earlier slices' readiness.
-3. One repair loop through the implementer: address valid P1/P2 findings, run affected test verification, and update the branch before PR slicing; retain remaining findings explicitly.
+3. One repair loop through the implementer over the merged list: address valid P1/P2 findings, run affected test verification, and update the branch before PR slicing; retain remaining findings explicitly.
 
 ## Stage 7 — Ship and hand back
 
