@@ -1,4 +1,5 @@
 ---
+name: verify
 description: Evidence-based verification of ANY change — UI or not — before claiming it works, finishing a task, or shipping. Decides what evidence would prove the behaviour, gathers it from the running system (browser via verify-ui, DB read-backs, real invocations), and reports verified / partial / not-verifiable with the evidence shown. Invoke after implementing anything, whenever the user asks "did you test it?", and always as ship's verification stage.
 ---
 

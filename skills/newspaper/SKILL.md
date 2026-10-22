@@ -1,4 +1,5 @@
 ---
+name: newspaper
 description: "Rewrite a draft (Slack message, doc comment, update) into the newspaper model: headline → impact → detail-on-request. Use for anything going to a non-technical or leadership audience."
 argument-hint: [paste the draft, or describe the message and audience]
 ---
