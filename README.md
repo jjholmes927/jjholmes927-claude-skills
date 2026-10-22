@@ -53,6 +53,10 @@ Findings, not code: claims the Linear ticket, ranks hypotheses before hunting ev
 
 Read-only review of a PR, branch range or commit against the good-code checklist, read fresh from life-vault every run (`$GOOD_CODE_CHECKLIST` overrides the path). Reads callers outside the diff, tries to disprove each finding, and reports severity, principle, file:line, scenario and evidence. No checklist means no review. `/e2e` Stage 6 runs it as its good-code lens.
 
+### 🧩 [UI Component Review](skills/ui-component-review/)
+
+Reviews component APIs, composition, styling ownership, and design-system fit against project guides, existing primitives, and applicable upstream contracts. Reports what to keep, the smallest justified changes, sources consulted, and verification limits. Use `/ui-component-review <component or PR>`; it also guides already requested UI implementation.
+
 ### 👀 [Codex Collab](skills/codex-collab/)
 
 Pulls codex/Sol in as a read-only second pair of eyes on whatever workflow is running: cross-model review, corroboration of a conclusion, or a blind second opinion on a design — with graded reasoning effort and honest disagreement reporting.
