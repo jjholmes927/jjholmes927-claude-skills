@@ -168,4 +168,6 @@ Every change under `skills/` needs a version bump in `plugin.json` and both vers
 git config core.hooksPath .githooks
 ```
 
-`master` only accepts pull requests with the version check green.
+`master` only accepts pull requests with the version and adapter compatibility checks green. CI imports each candidate into temporary Codex, Cursor and OpenCode installations and checks complete coverage, source parity and repeat imports.
+
+Shared skill content belongs here. Dotfiles owns harness compatibility and installation, and installed caches are generated outputs. Test unpublished changes in temporary targets; after merging a release, run `workflow-sync` from dotfiles to update the marketplace plugin and every installed adapter. Start fresh sessions afterwards. A skill-only change needs no dotfiles commit.

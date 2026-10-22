@@ -58,10 +58,15 @@ jobs:
           OLD=$(git show "$BASE":plugin.json | jq -r '.version')
           NEW=$(jq -r '.version' plugin.json)
           echo "Base version: $OLD — PR version: $NEW"
-          if [ "$OLD" = "$NEW" ]; then
-            echo "::error::Plugin content changed but version was not bumped (still $NEW). Bump plugin.json and both marketplace.json version fields."
-            exit 1
-          fi
+          python3 - "$OLD" "$NEW" <<'PY'
+          import re, sys
+          versions = sys.argv[1:]
+          if any(not re.fullmatch(r"\d+\.\d+\.\d+", value) for value in versions):
+              raise SystemExit("Plugin versions must use major.minor.patch")
+          old, new = (tuple(map(int, value.split("."))) for value in versions)
+          if new <= old:
+              raise SystemExit("Plugin content changed; increase all three version fields")
+          PY
 
   frontmatter-valid:
     runs-on: ubuntu-latest
@@ -73,14 +78,23 @@ jobs:
             failures = []
             Dir["commands/*.md", "skills/**/SKILL.md"].each do |f|
               lines = File.read(f).lines
-              next unless lines.first&.strip == "---"
+              unless lines.first&.strip == "---"
+                failures << "#{f}: missing frontmatter"
+                next
+              end
               close = lines[1..].index { |l| l.strip == "---" }
               if close.nil?
                 failures << "#{f}: unterminated frontmatter"
                 next
               end
               begin
-                YAML.safe_load(lines[1, close].join)
+                metadata = YAML.safe_load(lines[1, close].join)
+                unless metadata.is_a?(Hash) && metadata["description"].is_a?(String) && !metadata["description"].strip.empty?
+                  failures << "#{f}: missing description"
+                end
+                if f.start_with?("skills/") && metadata.is_a?(Hash) && metadata["name"] != File.basename(File.dirname(f))
+                  failures << "#{f}: name must match its directory"
+                end
               rescue => e
                 failures << "#{f}: #{e.message}"
               end
@@ -89,3 +103,18 @@ jobs:
             abort "#{failures.size} file(s) with invalid frontmatter" unless failures.empty?
             puts "Frontmatter valid in all commands and skills."
           '
+
+  adapter-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: marketplace
+      - uses: actions/checkout@v4
+        with:
+          repository: jjholmes927/dotfiles
+          path: dotfiles
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -B dotfiles/workflow/check-release.py --source marketplace
