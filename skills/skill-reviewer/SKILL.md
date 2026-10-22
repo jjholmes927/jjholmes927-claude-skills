@@ -1,4 +1,5 @@
 ---
+name: skill-reviewer
 description: Use when a Claude Code skill or command has been created or edited and needs a quality review, or when checking a skill against current Anthropic/superpowers authoring best practices.
 ---
 
@@ -245,7 +246,7 @@ After applying fixes, re-read the skill for a quick sanity check. Do not re-run 
 /joel-workflow:skill-reviewer .claude/skills/my-skill/SKILL.md
 → Reviews my-skill with its subject area as the domain
 
-/joel-workflow:skill-reviewer commands/brag-doc.md
+/joel-workflow:skill-reviewer skills/brag-doc/SKILL.md
 → Reviews a command file against the command-specific criteria
 
 /joel-workflow:skill-reviewer

@@ -3,7 +3,7 @@
     "id": "clean-committed-branch",
     "kind": "decision",
     "sources": [
-      "commands/ship.md"
+      "skills/ship/SKILL.md"
     ],
     "task": "The user asked to ship. The working tree is clean, but HEAD contains one unpublished task commit ahead of origin/main. There is no PR. Authentication is available. What should preflight do next?",
     "expected_action": "continue"
@@ -12,7 +12,7 @@
     "id": "worktree-server",
     "kind": "decision",
     "sources": [
-      "commands/ship.md"
+      "skills/ship/SKILL.md"
     ],
     "task": "Select the verification target. The repository's parallel-dev guide states that .env owns the runtime configuration. This checkout's .env contains PORT=4371; .env.local does not exist. Both localhost:3000 and localhost:4371 respond successfully, but 3000 belongs to another checkout. Return the chosen URL in target_url.",
     "expected_action": "verify",
@@ -22,8 +22,8 @@
     "id": "stale-verification",
     "kind": "decision",
     "sources": [
-      "commands/ship.md",
-      "commands/verify.md"
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md"
     ],
     "task": "At the pre-push gate, the working tree is clean. Verification succeeded for tree aaaa. Simplify then changed application behaviour and committed tree bbbb. Only .verify/aaaa.json exists. CI and unit tests are green. What must happen before publication?",
     "expected_action": "verify"

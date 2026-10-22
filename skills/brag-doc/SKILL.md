@@ -1,4 +1,5 @@
 ---
+name: brag-doc
 description: Generate weekly brag doc entries from GitHub activity
 ---
 

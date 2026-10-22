@@ -1,4 +1,5 @@
 ---
+name: ship
 description: End-to-end PR workflow — format, commit, verify behaviour with evidence (always, via /verify), push, open the PR, watch CI fail-fast, then consolidate Bugbot and AI-review feedback. Use when work is ready to become a pull request, or the user asks to ship it.
 ---
 

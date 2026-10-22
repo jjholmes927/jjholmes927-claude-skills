@@ -1,4 +1,5 @@
 ---
+name: pick-up-linear-ticket
 description: Use when the user says "pick up", "start working on", "grab ticket", "claim ticket", or provides a Linear ticket URL/identifier (e.g. INT-156, COR-123) and wants to begin implementation
 ---
 

@@ -1,4 +1,5 @@
 ---
+name: brief
 description: "Generate the user's morning chief-of-staff brief — Must act / Waiting on you / Today / Commitments detected, ≤200 words with hard caps. Use when the user says 'brief', 'morning brief', or 'what needs me today'."
 argument-hint: [optional focus, e.g. "people" or "delivery"]
 ---

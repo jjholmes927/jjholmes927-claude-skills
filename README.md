@@ -1,17 +1,18 @@
 # Claude Skills
 
-A collection of Claude Code commands and skills to enhance your development workflow, packaged as the `joel-workflow` plugin.
+A collection of Claude Code skills to enhance your development workflow, packaged as the `joel-workflow` plugin.
 
 ## Marketplace Overview
 
-This repository is a Claude Code plugin marketplace containing one plugin, `joel-workflow`: workflow slash commands plus skills that automate common development tasks.
+This repository is a Claude Code plugin marketplace containing one plugin, `joel-workflow`: skills that automate common development tasks.
 
-## Available Commands
+## Workflow Skills
 
-| Command | Description |
+All invocable as slash commands (e.g. `/ship`) or automatically by Claude from their descriptions.
+
+| Skill | Description |
 |---------|-------------|
 | `/ship` | End-to-end ship workflow: format, commit, verify with evidence (always), push, PR, CI watch, review consolidation |
-| `/review-pr` | Moved to Beam's private `beam-claude-skills` plugin — its CI reads that copy as instructions |
 | `/verify` | Evidence-based verification of any change — routes UI to /verify-ui; telemetry, APIs and jobs get real invocations and read-backs |
 | `/verify-ui` | UI arm of /verify — prove a UI flow in a real browser via agent-browser (localhost or staging) |
 | `/pick-up-linear-ticket` | Claim a Linear ticket and set up a branch to start implementation |
@@ -157,7 +158,7 @@ MIT - See LICENSE file for details
 
 ## Contributing
 
-Every change under `skills/` or `commands/` needs a version bump in `plugin.json` and both version fields in `.claude-plugin/marketplace.json`, otherwise installed copies never pick it up. CI enforces this on `master` and a local pre-push hook catches it earlier:
+Every change under `skills/` needs a version bump in `plugin.json` and both version fields in `.claude-plugin/marketplace.json`, otherwise installed copies never pick it up. CI enforces this on `master` and a local pre-push hook catches it earlier:
 
 ```bash
 git config core.hooksPath .githooks
