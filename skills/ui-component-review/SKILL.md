@@ -26,6 +26,8 @@ Read the relevant evidence before recommending a design:
 
 Keep a small evidence ledger: exact file/path or URL, what was inspected, and which decision it informs. Distinguish **project rule**, **upstream contract**, and **design recommendation**. A local styling preference does not cancel an accessibility or behavioural contract; explain the conflict when they differ.
 
+Project guides can be stale, contradictory, or overbroad. For advice that affects the verdict, check the problem it was meant to prevent against the current component, supported library version, and intended use. Separate a convention mismatch from a demonstrated defect; "the guide says so" alone does not establish a design flaw. Report questionable guidance with the exact rule, the concrete cost or contradiction, and a supported alternative. Respect applicable session instructions and explicit constraints; explain conflicts rather than silently ignoring them. Reviewing a component does not authorize rewriting its project guides.
+
 For shadcn projects, start with the applicable component's official composition examples at https://ui.shadcn.com/docs. Follow the matching primitive documentation for behaviour, such as Radix composition at https://www.radix-ui.com/primitives/docs/guides/composition. Use the relevant WAI-ARIA pattern at https://www.w3.org/WAI/ARIA/apg/patterns/ when assessing custom interaction semantics. Read only the pages needed for the component under review.
 
 ## Evaluate the boundaries
