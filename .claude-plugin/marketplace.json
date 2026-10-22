@@ -4,12 +4,12 @@
     "name": "jjholmes927"
   },
   "description": "Joel's personal Claude Code plugin marketplace",
-  "version": "2.23.0",
+  "version": "2.24.0",
   "plugins": [
     {
       "name": "joel-workflow",
-      "description": "Personal workflow skills: ship, verify, verify-ui, pick-up-linear-ticket, brag-doc, skill-reviewer, newspaper, brief, guideline-refresher, e2e, codex-collab, writing-pr-descriptions, good-code-review, dev-workflow-iterate, investigate, kandev-orchestrate, orchestrating-lanes",
-      "version": "2.23.0",
+      "description": "Personal workflow skills: ship, verify, verify-ui, pick-up-linear-ticket, brag-doc, skill-reviewer, newspaper, brief, guideline-refresher, e2e, codex-collab, writing-pr-descriptions, good-code-review, ui-component-review, dev-workflow-iterate, investigate, kandev-orchestrate, orchestrating-lanes",
+      "version": "2.24.0",
       "source": {
         "source": "github",
         "repo": "jjholmes927/jjholmes927-claude-skills"

@@ -53,6 +53,10 @@ Findings, not code: claims the Linear ticket, ranks hypotheses before hunting ev
 
 Read-only review of a PR, branch range or commit against the good-code checklist, read fresh from life-vault every run (`$GOOD_CODE_CHECKLIST` overrides the path). Reads callers outside the diff, tries to disprove each finding, and reports severity, principle, file:line, scenario and evidence. No checklist means no review. `/e2e` Stage 6 runs it as its good-code lens.
 
+### 🧩 [UI Component Review](skills/ui-component-review/)
+
+Reviews component APIs, composition, styling ownership, and design-system fit against project guides, existing primitives, and applicable upstream contracts. Reports what to keep, the smallest justified changes, sources consulted, and verification limits. Use `/ui-component-review <component or PR>`; it also guides already requested UI implementation.
+
 ### 👀 [Codex Collab](skills/codex-collab/)
 
 Pulls codex/Sol in as a read-only second pair of eyes on whatever workflow is running: cross-model review, corroboration of a conclusion, or a blind second opinion on a design — with graded reasoning effort and honest disagreement reporting.
@@ -164,4 +168,6 @@ Every change under `skills/` needs a version bump in `plugin.json` and both vers
 git config core.hooksPath .githooks
 ```
 
-`master` only accepts pull requests with the version check green.
+`master` only accepts pull requests with the version and adapter compatibility checks green. CI imports each candidate into temporary Codex, Cursor and OpenCode installations and checks complete coverage, source parity and repeat imports.
+
+Shared skill content belongs here. Dotfiles owns harness compatibility and installation, and installed caches are generated outputs. Test unpublished changes in temporary targets; after merging a release, run `workflow-sync` from dotfiles to update the marketplace plugin and every installed adapter. Start fresh sessions afterwards. A skill-only change needs no dotfiles commit.
