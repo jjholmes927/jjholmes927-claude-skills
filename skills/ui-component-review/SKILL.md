@@ -23,6 +23,7 @@ Read the relevant evidence before recommending a design:
 3. The closest existing primitives and shipped compositions. Open their implementations and representative usage: what they already handle matters more than matching names.
 4. The theme/token definitions and variant helpers touched by the concern. Inspect the design reference when one was supplied and visual fidelity is in scope. Record unavailable references instead of guessing their requirements.
 5. Official upstream docs or source for the specific primitive contract or pattern being questioned. Identify the installed family and version first; shadcn projects can use different underlying libraries. Compare with the project's copied source, which may intentionally differ from today's registry. Do not migrate libraries as part of a review.
+6. Relevant design discussions and decision records. Read PR review threads through their final replies, and inspect linked proposals when they affect the decision. Distinguish accepted decisions, experiments, and deferred work; keep the agreed PR scope separate from broader architectural follow-ups.
 
 Keep a small evidence ledger: exact file/path or URL, what was inspected, and which decision it informs. Distinguish **project rule**, **upstream contract**, and **design recommendation**. A local styling preference does not cancel an accessibility or behavioural contract; explain the conflict when they differ.
 
@@ -34,9 +35,10 @@ For shadcn projects, start with the applicable component's official composition 
 
 | Area | Question to resolve |
 |---|---|
-| Composition | Does an existing primitive or variant already own this behaviour? Does using it preserve the required design with less duplicated logic? |
-| Props and DOM | Which element receives `className`, refs, native attributes, event handlers, labels, and test IDs? Are that target and the exposed types consistent? For multiple interactive elements, which props affect one segment and which affect the whole control? |
-| Slots and children | Can callers supply the content they actually need without bypassing semantics or growing a new option for every row? Check prop/event/ref composition when using `asChild` or an equivalent mechanism. |
+| Composition | Separate appearance, size, and optional interaction. Does an existing primitive or variant already own the needed behaviour? Does using it preserve the required design with less duplicated logic? |
+| Public API | Can callers discover supported capabilities and combinations without learning overlapping component names? Compare the public entry points separately from internal components and modules; a public API can delegate to focused internal components. |
+| Props and DOM | Which element receives `className`, refs, native attributes, event handlers, labels, and test IDs? Are that target and the exposed types consistent? For multiple interactive elements, which props affect one segment and which affect the whole control? Do types express dependent props and prevent invalid combinations? |
+| Slots and children | When choosing between slots and typed item data, compare representative call sites. What markup, grouping, state, or accessibility work must callers repeat, and which custom content must remain possible? Check prop/event/ref composition when using `asChild` or an equivalent mechanism. |
 | State and events | Who owns open, selected, loading, and disabled state? Do supported controlled and uncontrolled paths work? Trace selection, dismissal, callback ordering, and focus restoration. |
 | Dependencies | Are application routes, permissions, analytics, data fetching, or business decisions in the appropriate layer? Is a provider dependency intentional for this component's role, or an avoidable obstacle to its intended reuse? |
 | Styling | Are tokens and existing variants used consistently? Are shared styles defined once? Trace overrides to an actual drift risk or behaviour loss before reporting them as a problem. |
