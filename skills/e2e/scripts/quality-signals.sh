@@ -16,9 +16,10 @@ emit() {
   repo=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
   head=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
   payload=$(python3 - "$event" "$repo" "$head" "$(hostname -s)" "$@" <<'PY'
-import json, sys
+import json, os, sys
 event, repo, head, host, *pairs = sys.argv[1:]
-fields = {"event": event, "repo": repo, "head": head, "host.name": host}
+attributes = dict(item.split("=", 1) for item in os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "").split(",") if "=" in item)
+fields = {"event": event, "repo": repo, "head": head, "host.name": attributes.get("host.name", host)}
 for pair in pairs:
     name, _, value = pair.partition("=")
     fields[name] = int(value) if value.isdigit() else value
@@ -63,98 +64,92 @@ skipped() {
   head -n 5 "$1" 2>/dev/null | grep -qiE 'do not (modify|edit)|automatically generated|@generated'
 }
 
+available() {
+  command -v "$1" >/dev/null && return 0
+  echo "$1: not run (not installed)" >> "$work/not-run"
+  return 1
+}
+
 if ! git diff --name-only --diff-filter=AM "$base"...HEAD > "$work/diff" 2>"$work/diff-error"; then
   printf '# Quality signals\n\nNot run: could not diff against `%s` (%s).\n' "$base" "$(head -n 1 "$work/diff-error")" > "$report"
   echo "$report"
   exit 0
 fi
+has_js=""
+: > "$work/scored"
+: > "$work/ruby"
 while read -r file; do
   [[ -f "$file" ]] || continue
   skipped "$file" && continue
   case "$file" in
-    *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs) echo "$file" >> "$work/scored"; echo "$file" >> "$work/js" ;;
+    *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs) echo "$file" >> "$work/scored"; has_js=1 ;;
     *.go|*.py) echo "$file" >> "$work/scored" ;;
     *.rb|*.rake) echo "$file" >> "$work/ruby" ;;
   esac
 done < "$work/diff"
-touch "$work/scored" "$work/js" "$work/ruby"
 
 created=""
-for dir in .metrics coverage; do
-  [[ -e $dir ]] || created="$created $dir"
+for path in .metrics coverage .reek.yml; do
+  [[ -e $path ]] || created="$created $path"
 done
 
-crap_high=0 crap_mid=0
-if [[ -s "$work/scored" ]]; then
-  if ! command -v crapper >/dev/null; then
-    echo "crapper: not run (not installed)" >> "$work/not-run"
-  else
-    flags=()
-    if [[ -n ${QUALITY_COVERAGE_CMD:-} ]]; then
-      bash -c "$QUALITY_COVERAGE_CMD" > "$work/coverage.log" 2>&1 || echo "coverage: \`$QUALITY_COVERAGE_CMD\` failed, scores may show 0%" >> "$work/not-run"
-      flags=(--use-existing-coverage)
-    elif [[ -s "$work/js" && -f package.json ]] && grep -q '"test": *"[^"]*vitest' package.json; then
-      if [[ -f pnpm-lock.yaml ]]; then runner=(pnpm run test); elif [[ -f yarn.lock ]]; then runner=(yarn test); else runner=(npm test --); fi
-      major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
-      node_options=${NODE_OPTIONS:-}
-      [[ $major -ge 25 && $node_options != *webstorage* ]] && node_options="$node_options --no-experimental-webstorage"
-      NODE_OPTIONS=$node_options "${runner[@]}" --coverage.enabled --coverage.provider=v8 --coverage.reporter=lcov \
-        --coverage.reportsDirectory=coverage --coverage.reportOnFailure > "$work/coverage.log" 2>&1 \
-        || echo "coverage: tests failed, scores use the coverage that was written" >> "$work/not-run"
-      flags=(--use-existing-coverage)
-    fi
-    xargs crapper ${flags[@]+"${flags[@]}"} < "$work/scored" > "$work/crapper.out" 2>&1
-    awk '/^Function +Namespace/ {table=1; next} table && /^-+$/ {next} table && NF >= 5 {print}' "$work/crapper.out" > "$work/crap-rows"
-    crap_high=$(awk '$NF + 0 >= 30' "$work/crap-rows" | wc -l | tr -d ' ')
-    crap_mid=$(awk '$NF + 0 >= 10 && $NF + 0 < 30' "$work/crap-rows" | wc -l | tr -d ' ')
-    if [[ ! -s "$work/crap-rows" ]]; then
-      echo "crapper: ran but reported no functions ($(tail -n 1 "$work/crapper.out"))" >> "$work/not-run"
-    elif ! awk '{sub(/%$/, "", $(NF-1)); if ($(NF-1) + 0 > 0) found=1} END {exit !found}' "$work/crap-rows"; then
-      echo "crapper: every function shows 0% coverage, so coverage probably didn't run" >> "$work/not-run"
-    fi
+crap_high=0 crap_mid=0 crapper_ran=""
+if [[ -s "$work/scored" ]] && available crapper; then
+  crapper_ran=1
+  coverage_flag=""
+  if [[ -n ${QUALITY_COVERAGE_CMD:-} ]]; then
+    bash -c "$QUALITY_COVERAGE_CMD" > "$work/coverage.log" 2>&1 || echo "coverage: \`$QUALITY_COVERAGE_CMD\` failed, scores may show 0%" >> "$work/not-run"
+    coverage_flag=--use-existing-coverage
+  elif [[ -n $has_js && -f package.json ]] && grep -q '"test": *"[^"]*vitest' package.json; then
+    if [[ -f pnpm-lock.yaml ]]; then runner="pnpm run test"; elif [[ -f yarn.lock ]]; then runner="yarn test"; else runner="npm test --"; fi
+    includes=$(grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' "$work/scored" | sed 's/^/--coverage.include=/' | paste -sd' ' -)
+    $runner --changed "$base" $includes --coverage.enabled --coverage.provider=v8 --coverage.reporter=lcovonly \
+      --coverage.reportsDirectory=coverage --coverage.reportOnFailure > "$work/coverage.log" 2>&1 \
+      || echo "coverage: tests failed, scores use the coverage that was written" >> "$work/not-run"
+    coverage_flag=--use-existing-coverage
+  fi
+  xargs crapper $coverage_flag < "$work/scored" > "$work/crapper.out" 2>&1
+  awk '/^Function +Namespace/ {table=1; next} table && /^-+$/ {next} table && NF >= 5 {print}' "$work/crapper.out" > "$work/crap-rows"
+  awk '$NF + 0 >= 30' "$work/crap-rows" > "$work/crap-high"
+  crap_high=$(wc -l < "$work/crap-high" | tr -d ' ')
+  crap_mid=$(awk '$NF + 0 >= 10 && $NF + 0 < 30' "$work/crap-rows" | wc -l | tr -d ' ')
+  if [[ ! -s "$work/crap-rows" ]]; then
+    echo "crapper: ran but reported no functions ($(tail -n 1 "$work/crapper.out"))" >> "$work/not-run"
+  elif ! awk '{sub(/%$/, "", $(NF-1)); if ($(NF-1) + 0 > 0) found=1} END {exit !found}' "$work/crap-rows"; then
+    echo "crapper: every function shows 0% coverage, so coverage probably didn't run" >> "$work/not-run"
   fi
 fi
 
-duplicates=0
-if [[ -s "$work/scored" ]]; then
-  if ! command -v dryer >/dev/null; then
-    echo "dryer: not run (not installed)" >> "$work/not-run"
-  else
-    cut -d/ -f1-2 "$work/scored" | sort -u | while read -r root; do [[ -e $root ]] && echo "$root"; done > "$work/roots"
-    xargs dryer < "$work/roots" > "$work/dryer.out" 2>&1
-    awk '/^DUPLICATE score=/ {score=$2; sub(/score=/, "", score); getline a; getline b; gsub(/^ +/, "", a); gsub(/^ +/, "", b); print score "\t" a "\t" b}' "$work/dryer.out" > "$work/pairs"
-    while IFS=$'\t' read -r score left right; do
-      left_file=${left%%:*} right_file=${right%%:*}
-      skipped "$left_file" && continue
-      skipped "$right_file" && continue
-      grep -qxF "$left_file" "$work/scored" || grep -qxF "$right_file" "$work/scored" || continue
-      printf -- '- score %s: `%s` and `%s`\n' "$score" "$left" "$right" >> "$work/dupes"
-    done < "$work/pairs"
-    [[ -f "$work/dupes" ]] && duplicates=$(wc -l < "$work/dupes" | tr -d ' ')
-  fi
+duplicates=0 dryer_ran=""
+: > "$work/dupes"
+if [[ -s "$work/scored" ]] && available dryer; then
+  dryer_ran=1
+  cut -d/ -f1 "$work/scored" | sort -u > "$work/roots"
+  xargs dryer < "$work/roots" > "$work/dryer.out" 2>&1
+  awk '/^DUPLICATE score=/ {score=$2; sub(/score=/, "", score); getline a; getline b; gsub(/^ +/, "", a); gsub(/^ +/, "", b); print score "\t" a "\t" b}' "$work/dryer.out" > "$work/pairs"
+  while IFS=$'\t' read -r score left right; do
+    left_file=${left%%:*} right_file=${right%%:*}
+    grep -qxF "$left_file" "$work/scored" || grep -qxF "$right_file" "$work/scored" || continue
+    skipped "$left_file" && continue
+    skipped "$right_file" && continue
+    printf -- '- score %s: `%s` and `%s`\n' "$score" "$left" "$right" >> "$work/dupes"
+  done < "$work/pairs"
+  duplicates=$(wc -l < "$work/dupes" | tr -d ' ')
 fi
 
-ruby_flagged=0
-if [[ -s "$work/ruby" ]]; then
-  if ! command -v rubycritic >/dev/null; then
-    echo "rubycritic: not run (not installed)" >> "$work/not-run"
-  else
-    reek_added=""
-    if [[ ! -e .reek.yml ]]; then
-      cp "$HERE/quality-signals.reek.yml" .reek.yml
-      reek_added=1
-    fi
-    xargs rubycritic --no-browser --format console --path "$work/rubycritic" < "$work/ruby" > "$work/rubycritic.out" 2>&1
-    [[ -n $reek_added ]] && rm -f .reek.yml
-    awk '/^[A-Za-z0-9_:]+:$/ {name=$0; sub(/:$/, "", name)} /^ +Rating: +[DF]$/ {print "- " $2 ": `" name "`"}' "$work/rubycritic.out" > "$work/ruby-classes"
-    awk '/\(HighComplexity\)/ {text=$0; sub(/^ *\* \(HighComplexity\) /, "", text); getline where; sub(/^ *- */, "", where); print $NF "\t- " text " (`" where "`)"}' "$work/rubycritic.out" \
-      | sort -rn | cut -f2- > "$work/ruby-complex"
-    ruby_flagged=$(cat "$work/ruby-classes" "$work/ruby-complex" | wc -l | tr -d ' ')
-    grep -qE 'Rating:' "$work/rubycritic.out" || echo "rubycritic: ran but rated nothing ($(tail -n 1 "$work/rubycritic.out"))" >> "$work/not-run"
-  fi
+ruby_flagged=0 ruby_ran=""
+if [[ -s "$work/ruby" ]] && available rubycritic; then
+  ruby_ran=1
+  [[ -e .reek.yml ]] || cp "$HERE/quality-signals.reek.yml" .reek.yml
+  xargs rubycritic --no-browser --format console --churn-after "$(date +%F)" --path "$work/rubycritic" < "$work/ruby" > "$work/rubycritic.out" 2>&1
+  awk '/^[A-Za-z0-9_:]+:$/ {name=$0; sub(/:$/, "", name)} /^ +Rating: +[DF]$/ {print "- " $2 ": `" name "`"}' "$work/rubycritic.out" > "$work/ruby-classes"
+  awk '/\(HighComplexity\)/ {text=$0; sub(/^ *\* \(HighComplexity\) /, "", text); getline where; sub(/^ *- */, "", where); print $NF "\t- " text " (`" where "`)"}' "$work/rubycritic.out" \
+    | sort -rn | cut -f2- > "$work/ruby-complex"
+  ruby_flagged=$(cat "$work/ruby-classes" "$work/ruby-complex" | wc -l | tr -d ' ')
+  grep -qE 'Rating:' "$work/rubycritic.out" || echo "rubycritic: ran but rated nothing ($(tail -n 1 "$work/rubycritic.out"))" >> "$work/not-run"
 fi
 
-for dir in $created; do rm -rf "$dir"; done
+for path in $created; do rm -rf "$path"; done
 seconds=$(( $(date +%s) - started ))
 scored_count=$(cat "$work/scored" "$work/ruby" | wc -l | tr -d ' ')
 
@@ -162,27 +157,27 @@ scored_count=$(cat "$work/scored" "$work/ruby" | wc -l | tr -d ' ')
   echo "# Quality signals"
   echo
   echo "Base \`$base\`, head \`$(git rev-parse --short HEAD)\`: $scored_count changed source files, ${seconds}s. These are hints for the reviewers, not findings."
-  if [[ -s "$work/crap-rows" ]]; then
+  if [[ -n $crapper_ran && -s "$work/crap-rows" ]]; then
     echo
     echo "## Risky functions (crapper)"
     echo
     echo "CRAP combines complexity with missing coverage. 30 or more is risky."
     echo
-    awk '$NF + 0 >= 30 {printf "- `%s` in `%s`: CRAP %s, complexity %s, coverage %s\n", $1, $2, $NF, $(NF-2), $(NF-1)}' "$work/crap-rows" | head -n 15
+    awk '{printf "- `%s` in `%s`: CRAP %s, complexity %s, coverage %s\n", $1, $2, $NF, $(NF-2), $(NF-1)}' "$work/crap-high" | head -n 15
     [[ $crap_high -eq 0 ]] && echo "- None at 30 or more."
     [[ $crap_mid -gt 0 ]] && echo "- $crap_mid more between 10 and 30."
   fi
-  if [[ -s "$work/scored" ]] && command -v dryer >/dev/null; then
+  if [[ -n $dryer_ran ]]; then
     echo
     echo "## Duplicates touching changed files (dryer)"
     echo
-    if [[ -f "$work/dupes" ]]; then head -n 20 "$work/dupes"; else echo "- None."; fi
+    if [[ -s "$work/dupes" ]]; then head -n 20 "$work/dupes"; else echo "- None."; fi
   fi
-  if [[ -s "$work/ruby" ]] && command -v rubycritic >/dev/null; then
+  if [[ -n $ruby_ran ]]; then
     echo
     echo "## Ruby (rubycritic)"
     echo
-    if [[ $ruby_flagged -eq 0 ]]; then echo "- No D or F classes and no high-complexity methods."; fi
+    [[ $ruby_flagged -eq 0 ]] && echo "- No D or F classes and no high-complexity methods."
     cat "$work/ruby-classes"
     head -n 15 "$work/ruby-complex"
   fi

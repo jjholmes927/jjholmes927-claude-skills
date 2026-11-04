@@ -25,6 +25,7 @@ mkdir -p "$TMP/bin" "$TMP/all-tools" "$REPO"
 export XDG_STATE_HOME="$TMP/state"
 export QUALITY_COVERAGE_CMD="true"
 export TOOL_LOG="$TMP/tools.log"
+LEDGER="$XDG_STATE_HOME/e2e/quality-signals.tsv"
 
 cat > "$TMP/all-tools/crapper" <<'SHIM'
 #!/usr/bin/env bash
@@ -62,6 +63,7 @@ echo "Fine:"
 echo "  Rating:       A"
 SHIM
 printf '#!/bin/sh\nexit 1\n' > "$TMP/bin/security"
+printf '#!/bin/sh\necho "pnpm $*" >> "$TOOL_LOG"\n' > "$TMP/all-tools/pnpm"
 chmod +x "$TMP/all-tools/"* "$TMP/bin/security"
 for tool in git python3 awk sed grep sort cut head tail wc tr paste xargs date mktemp dirname basename cat cp rm mkdir touch hostname bash env; do
   ln -s "$(command -v "$tool")" "$TMP/bin/$tool"
@@ -93,28 +95,37 @@ assert "report drops duplicates not touching changed files" "" "$(grep more.ts <
 contains "report lists the F class" '- F: `Thing`' "$report"
 contains "report lists the complex method" '- Thing#call has a flog score of 47 (`app/models/thing.rb:3`)' "$report"
 assert "crapper scores only changed source" "crapper --use-existing-coverage app/hooks/thing.ts" "$(grep '^crapper' "$TOOL_LOG")"
-assert "dryer runs on the changed source folder" "dryer app/hooks" "$(grep '^dryer' "$TOOL_LOG")"
+assert "dryer scans the changed file's top-level folder" "dryer app" "$(grep '^dryer' "$TOOL_LOG")"
 assert "rubycritic gets only changed Ruby" "app/models/thing.rb" "$(grep '^rubycritic' "$TOOL_LOG" | awk '{print $NF}')"
 contains "rubycritic sees the noise config" "reek config present" "$(cat "$TOOL_LOG")"
 assert "temporary reek config is removed" "no" "$([[ -e .reek.yml ]] && echo yes || echo no)"
 assert "tool output folders are removed" "no" "$([[ -e .metrics ]] && echo yes || echo no)"
 assert "working tree stays clean" "" "$(git status --porcelain)"
-contains "run is recorded" '"event": "quality_signals_run"' "$(cat "$XDG_STATE_HOME/e2e/quality-signals.tsv")"
-contains "run records the counts" '"crap_30_plus": 1, "crap_10_30": 1, "duplicates": 1, "ruby_flagged": 2' "$(cat "$XDG_STATE_HOME/e2e/quality-signals.tsv")"
+contains "run is recorded" '"event": "quality_signals_run"' "$(cat "$LEDGER")"
+contains "run records the counts" '"crap_30_plus": 1, "crap_10_30": 1, "duplicates": 1, "ruby_flagged": 2' "$(cat "$LEDGER")"
+
+printf '{"scripts": {"test": "vitest --project=unit --run"}}\n' > package.json
+touch pnpm-lock.yaml
+: > "$TOOL_LOG"
+QUALITY_COVERAGE_CMD="" PATH="$TMP/all-tools:$TMP/bin" "$SUT" main > /dev/null
+assert "a Vitest project gets coverage for the changed tests only" \
+  "pnpm run test --changed main --coverage.include=app/hooks/thing.ts --coverage.enabled --coverage.provider=v8 --coverage.reporter=lcovonly --coverage.reportsDirectory=coverage --coverage.reportOnFailure" \
+  "$(grep '^pnpm' "$TOOL_LOG")"
+rm package.json pnpm-lock.yaml
 
 out=$(PATH="$TMP/bin" "$SUT" main)
 report=$(cat .e2e/quality-signals.md)
 contains "missing crapper is reported" "crapper: not run (not installed)" "$report"
 contains "missing rubycritic is reported" "rubycritic: not run (not installed)" "$report"
-contains "missing tools are recorded" '"not_run": "crapper,dryer,rubycritic"' "$(tail -n 1 "$XDG_STATE_HOME/e2e/quality-signals.tsv")"
+contains "missing tools are recorded" '"not_run": "crapper,dryer,rubycritic"' "$(tail -n 1 "$LEDGER")"
 
 out=$(PATH="$TMP/all-tools:$TMP/bin" "$SUT" no-such-ref)
 assert "a bad base still exits 0" "0" "$?"
 contains "a bad base is reported" "Not run: could not diff against \`no-such-ref\`" "$(cat .e2e/quality-signals.md)"
 
 PATH="$TMP/bin" "$SUT" record 2 1
-contains "outcome is recorded" '"event": "quality_signals_outcome"' "$(tail -n 1 "$XDG_STATE_HOME/e2e/quality-signals.tsv")"
-contains "outcome records the counts" '"accepted": 2, "dismissed": 1' "$(tail -n 1 "$XDG_STATE_HOME/e2e/quality-signals.tsv")"
+contains "outcome is recorded" '"event": "quality_signals_outcome"' "$(tail -n 1 "$LEDGER")"
+contains "outcome records the counts" '"accepted": 2, "dismissed": 1' "$(tail -n 1 "$LEDGER")"
 PATH="$TMP/bin" "$SUT" record two 1 2>/dev/null
 assert "record rejects a non-number" "2" "$?"
 PATH="$TMP/bin" "$SUT" 2>/dev/null
