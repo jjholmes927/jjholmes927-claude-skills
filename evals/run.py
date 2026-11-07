@@ -65,6 +65,8 @@ GATE_SCHEMA = {
     "properties": {**SCHEMA["properties"], **GATE_FIELDS},
 }
 BUDGETS = {"light": (700, 8), "full": (2000, 25)}
+TLDR = "> **TL;DR**"
+TLDR_CHARS = 200
 BOOKKEEPING = re.compile(r"^\s*(?:#+\s*|\*\*)(?:routes and identities|permitted effects|runtime assumptions|dependency constraints|audit dispositions)", re.I | re.M)
 REQUIREMENTS = """delivery_fee(weight_grams) accepts integer weights.
 Non-positive weights raise ValueError.
@@ -196,11 +198,13 @@ def grade_gate(case, response):
     others = [d for d in decisions if d not in approvals]
     choice = case.get("two_way_choice", "")
     max_chars, max_lines = BUDGETS[tier]
+    tldr = lines[0].removeprefix(TLDR).strip() if lines and lines[0].startswith(TLDR) else ""
     return {
         "tier": response["tier"] == tier,
-        "effects": set(case["expected_effects"]) <= set(response["effects"]),
+        "effects": set(case["expected_effects"]) == set(response["effects"]),
         "budget": len(text) <= max_chars and len(lines) <= max_lines,
-        "order": bool(lines) and lines[0].startswith("> **TL;DR**") and first_row is not None and effects_first,
+        "order": bool(tldr) and first_row is not None and effects_first,
+        "tldr": bool(tldr) and "`" not in tldr and len(tldr) <= TLDR_CHARS and len(re.findall(r"[.!?](?=\s|$)", tldr)) <= 1,
         "bookkeeping": not BOOKKEEPING.search(brief),
         "decisions": len(others) <= (3 if tier == "full" else 0)
         and all(any(not o["reversible"] for o in d["options"]) for d in others)
