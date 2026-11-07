@@ -25,7 +25,7 @@ mkdir -p "$TMP/bin" "$TMP/all-tools" "$REPO"
 export XDG_STATE_HOME="$TMP/state"
 export QUALITY_COVERAGE_CMD="true"
 export TOOL_LOG="$TMP/tools.log"
-LEDGER="$XDG_STATE_HOME/e2e/quality-signals.tsv"
+LEDGER="$XDG_STATE_HOME/e2e/ledger.tsv"
 
 cat > "$TMP/all-tools/crapper" <<'SHIM'
 #!/usr/bin/env bash

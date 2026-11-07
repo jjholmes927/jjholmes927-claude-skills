@@ -27,7 +27,11 @@ elif [[ "$2" == "review" ]]; then
 fi
 SHIM
 chmod +x "$TMP/bin/codex"
+printf '#!/bin/sh\nexit 1\n' > "$TMP/bin/security"
+chmod +x "$TMP/bin/security"
 export PATH="$TMP/bin:$PATH"
+export XDG_STATE_HOME="$TMP/state"
+LEDGER="$TMP/state/e2e/ledger.tsv"
 export CODEX_SHIM_ARGS="$TMP/args.log"
 export E2E_IMPLEMENTER_MODEL=fixture-implementer
 export E2E_REVIEWER_MODEL=fixture-reviewer
@@ -93,6 +97,30 @@ case "$args" in *"--model gpt-6-luna"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); 
 E2E_REVIEWER_MODEL=astra "$SUT" audit "$TMP/work" "$PROMPT" >/dev/null
 args=$(cat "$CODEX_SHIM_ARGS")
 case "$args" in *"--model gpt-6-astra"*) PASS=$((PASS+1));; *) FAIL=$((FAIL+1)); echo "FAIL: astra alias resolves to gpt-6-astra";; esac
+
+contains() {
+  local desc=$1 needle=$2 haystack=$3
+  if [[ "$haystack" == *"$needle"* ]]; then PASS=$((PASS+1)); else
+    FAIL=$((FAIL+1)); echo "FAIL: $desc"; echo "  missing: $needle"; echo "  in: $haystack"
+  fi
+}
+
+rm -f "$LEDGER"
+"$SUT" review "$TMP/work" --commit deadbeef >/dev/null
+last=$(tail -n 1 "$LEDGER")
+contains "review is recorded" '"event": "codex_run"' "$last"
+contains "review records mode, model and exit" '"mode": "review", "model": "fixture-reviewer", "exit": 0' "$last"
+contains "review records its duration" '"seconds": ' "$last"
+CODEX_SHIM_EXIT=3 "$SUT" run "$TMP/work" low "$PROMPT" >/dev/null 2>&1
+contains "a failed run records its exit code" '"mode": "run", "model": "fixture-implementer", "exit": 3' "$(tail -n 1 "$LEDGER")"
+CODEX_SHIM_NO_THREAD=1 "$SUT" run "$TMP/work" low "$PROMPT" >/dev/null 2>&1
+contains "a run with no thread records exit 1" '"exit": 1' "$(tail -n 1 "$LEDGER")"
+out=$("$SUT" run "$TMP/work" high "$PROMPT")
+assert "recording leaves run output as just the thread id" "aaaa-1111-bbbb-2222" "$out"
+lines=$(wc -l < "$LEDGER")
+"$SUT" review "$TMP/work" --uncommitted --dangerously-bypass-approvals-and-sandbox >/dev/null 2>&1
+E2E_REVIEWER_MODEL= "$SUT" audit "$TMP/work" "$PROMPT" >/dev/null 2>&1
+assert "usage errors and missing models are not recorded" "$lines" "$(wc -l < "$LEDGER")"
 
 echo "---"
 echo "pass=$PASS fail=$FAIL"
