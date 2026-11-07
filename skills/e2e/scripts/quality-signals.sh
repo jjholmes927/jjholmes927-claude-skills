@@ -15,11 +15,10 @@ emit() {
   local repo head payload key
   repo=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
   head=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
-  payload=$(python3 - "$event" "$repo" "$head" "$(hostname -s)" "$@" <<'PY'
-import json, os, sys
+  payload=$(python3 - "$event" "$repo" "$head" "$(agent-host-name 2>/dev/null || hostname -s)" "$@" <<'PY'
+import json, sys
 event, repo, head, host, *pairs = sys.argv[1:]
-attributes = dict(item.split("=", 1) for item in os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "").split(",") if "=" in item)
-fields = {"event": event, "repo": repo, "head": head, "host.name": attributes.get("host.name", host)}
+fields = {"event": event, "repo": repo, "head": head, "host.name": host}
 for pair in pairs:
     name, _, value = pair.partition("=")
     fields[name] = int(value) if value.isdigit() else value
@@ -61,7 +60,28 @@ skipped() {
     */__tests__/*|*.test.*|*.spec.*|*_spec.rb|*_test.rb|*_test.go|test_*.py|spec/*|*/spec/*|test/*|*/test/*|tests/*|*/tests/*) return 0 ;;
     *.stories.*|*/stories/*|vendor/*|*/vendor/*|node_modules/*|*/node_modules/*) return 0 ;;
   esac
-  head -n 5 "$1" 2>/dev/null | grep -qiE 'do not (modify|edit)|automatically generated|@generated'
+  head -n 5 "$1" 2>/dev/null | grep -qiE 'do not (modify|edit)|auto(matically)?[- ]generated|@generated'
+}
+
+touches() {
+  local file=${1%%:*} range=${1#*:}
+  awk -F'\t' -v file="$file" -v from="${range%-*}" -v to="${range#*-}" \
+    '$1 == file && $2 <= to && $3 >= from {found = 1} END {exit !found}' "$work/changed-lines"
+}
+
+method_changed() {
+  local file=${1%%:*} start=${1##*:} end
+  end=$(awk -v start="$start" '
+    NR == start {match($0, /^[[:space:]]*/); closing = "^" substr($0, 1, RLENGTH) "end([[:space:]]|$)"}
+    NR > start && $0 ~ closing {print NR; found = 1; exit}
+    END {if (!found) print start}
+  ' "$file" 2>/dev/null) || return 1
+  touches "$file:$start-$end"
+}
+
+changed_first() {
+  grep -F "$mark" "$1"
+  grep -vF "$mark" "$1" | head -n "$2"
 }
 
 available() {
@@ -87,6 +107,11 @@ while read -r file; do
     *.rb|*.rake) echo "$file" >> "$work/ruby" ;;
   esac
 done < "$work/diff"
+git diff -U0 --no-color "$base"...HEAD | awk '
+  /^\+\+\+ b\// {file = substr($0, 7)}
+  /^@@ / {split(substr($3, 2), range, ","); count = (range[2] == "") ? 1 : range[2]; print file "\t" range[1] "\t" range[1] + (count > 0 ? count - 1 : 0)}
+' > "$work/changed-lines"
+mark="(changed by this branch)"
 
 created=""
 for path in .metrics coverage .reek.yml; do
@@ -132,7 +157,9 @@ if [[ -s "$work/scored" ]] && available dryer; then
     grep -qxF "$left_file" "$work/scored" || grep -qxF "$right_file" "$work/scored" || continue
     skipped "$left_file" && continue
     skipped "$right_file" && continue
-    printf -- '- score %s: `%s` and `%s`\n' "$score" "$left" "$right" >> "$work/dupes"
+    suffix=""
+    if touches "$left" || touches "$right"; then suffix=" $mark"; fi
+    printf -- '- score %s: `%s` and `%s`%s\n' "$score" "$left" "$right" "$suffix" >> "$work/dupes"
   done < "$work/pairs"
   duplicates=$(wc -l < "$work/dupes" | tr -d ' ')
 fi
@@ -143,8 +170,12 @@ if [[ -s "$work/ruby" ]] && available rubycritic; then
   [[ -e .reek.yml ]] || cp "$HERE/quality-signals.reek.yml" .reek.yml
   xargs rubycritic --no-browser --format console --churn-after "$(date +%F)" --path "$work/rubycritic" < "$work/ruby" > "$work/rubycritic.out" 2>&1
   awk '/^[A-Za-z0-9_:]+:$/ {name=$0; sub(/:$/, "", name)} /^ +Rating: +[DF]$/ {print "- " $2 ": `" name "`"}' "$work/rubycritic.out" > "$work/ruby-classes"
-  awk '/\(HighComplexity\)/ {text=$0; sub(/^ *\* \(HighComplexity\) /, "", text); getline where; sub(/^ *- */, "", where); print $NF "\t- " text " (`" where "`)"}' "$work/rubycritic.out" \
-    | sort -rn | cut -f2- > "$work/ruby-complex"
+  awk '/\((Very)?HighComplexity\)/ {text=$0; sub(/^ *\* \((Very)?HighComplexity\) /, "", text); getline where; sub(/^ *- */, "", where); print $NF "\t" text "\t" where}' "$work/rubycritic.out" \
+    | sort -rn | while IFS=$'\t' read -r _ text where; do
+    suffix=""
+    if method_changed "$where"; then suffix=" $mark"; fi
+    printf -- '- %s (`%s`)%s\n' "$text" "$where" "$suffix"
+  done > "$work/ruby-complex"
   ruby_flagged=$(cat "$work/ruby-classes" "$work/ruby-complex" | wc -l | tr -d ' ')
   grep -qE 'Rating:' "$work/rubycritic.out" || echo "rubycritic: ran but rated nothing ($(tail -n 1 "$work/rubycritic.out"))" >> "$work/not-run"
 fi
@@ -152,11 +183,12 @@ fi
 for path in $created; do rm -rf "$path"; done
 seconds=$(( $(date +%s) - started ))
 scored_count=$(cat "$work/scored" "$work/ruby" | wc -l | tr -d ' ')
+changed_flags=$(cat "$work/dupes" "$work/ruby-complex" 2>/dev/null | grep -cF "$mark")
 
 {
   echo "# Quality signals"
   echo
-  echo "Base \`$base\`, head \`$(git rev-parse --short HEAD)\`: $scored_count changed source files, ${seconds}s. These are hints for the reviewers, not findings."
+  echo "Base \`$base\`, head \`$(git rev-parse --short HEAD)\`: $scored_count changed source files, ${seconds}s. Items marked $mark are findings to fix in this branch. crapper can't tell which functions changed, so check its list against the diff. Everything else is a hint."
   if [[ -n $crapper_ran && -s "$work/crap-rows" ]]; then
     echo
     echo "## Risky functions (crapper)"
@@ -171,7 +203,7 @@ scored_count=$(cat "$work/scored" "$work/ruby" | wc -l | tr -d ' ')
     echo
     echo "## Duplicates touching changed files (dryer)"
     echo
-    if [[ -s "$work/dupes" ]]; then head -n 20 "$work/dupes"; else echo "- None."; fi
+    if [[ -s "$work/dupes" ]]; then changed_first "$work/dupes" 20; else echo "- None."; fi
   fi
   if [[ -n $ruby_ran ]]; then
     echo
@@ -179,7 +211,7 @@ scored_count=$(cat "$work/scored" "$work/ruby" | wc -l | tr -d ' ')
     echo
     [[ $ruby_flagged -eq 0 ]] && echo "- No D or F classes and no high-complexity methods."
     cat "$work/ruby-classes"
-    head -n 15 "$work/ruby-complex"
+    changed_first "$work/ruby-complex" 15
   fi
   if [[ -s "$work/not-run" ]]; then
     echo
@@ -191,6 +223,6 @@ scored_count=$(cat "$work/scored" "$work/ruby" | wc -l | tr -d ' ')
 
 not_run=$(cut -d: -f1 "$work/not-run" | sort -u | paste -sd, -)
 emit quality_signals_run "changed_files=$scored_count" "crap_30_plus=$crap_high" "crap_10_30=$crap_mid" \
-  "duplicates=$duplicates" "ruby_flagged=$ruby_flagged" "not_run=${not_run:-none}" "seconds=$seconds"
+  "duplicates=$duplicates" "ruby_flagged=$ruby_flagged" "changed_code_flags=$changed_flags" "not_run=${not_run:-none}" "seconds=$seconds"
 echo "$report"
 exit 0
