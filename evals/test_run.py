@@ -44,7 +44,7 @@ MERMAID = "```mermaid\nflowchart LR\n  Save --> Sweep\n```\n"
 
 
 def sized(brief, lines, chars):
-    brief += "\n- note" * (lines - len([line for line in brief.splitlines() if line.strip()]))
+    brief += "\n- note" * (lines - len(run.visible_lines(brief)[1]))
     return brief + "." * (chars - len(brief))
 
 
@@ -60,12 +60,13 @@ class GraderTests(unittest.TestCase):
 
     def answer(self, action, findings=None, target=None, **gate):
         response = {"action": action, "reason": "Evidence for the decision",
-                    "target_url": target, "findings": findings or [],
-                    "tier": None, "effects": [], "brief": None, "decisions": [], **gate}
+                    "target_url": target, "findings": findings or [], **gate}
         (self.directory / "response.json").write_text(json.dumps(response))
         return run.grade(self.case, self.directory)
 
-    def gate(self, brief, decisions=(APPROVAL,), **overrides):
+    def gate(self, brief, decisions=None, **overrides):
+        if decisions is None:
+            decisions = [OVERWRITE, APPROVAL] if self.case["expected_tier"] == "full" else [APPROVAL]
         fields = {"tier": self.case["expected_tier"], "effects": self.case["expected_effects"], **overrides}
         return self.answer("gated", brief=brief, decisions=list(decisions), **fields)
 
@@ -116,19 +117,19 @@ class GraderTests(unittest.TestCase):
 
     def test_gate_workspace_holds_only_the_plan(self):
         workspace = self.prepare("gate-full")
-        fixture = Path(__file__).with_name("fixtures") / "gate-full-plan.md"
+        fixture = run.FIXTURES / self.case["fixture"]
         self.assertEqual(fixture.read_text(), (workspace / "PLAN.md").read_text())
         self.assertFalse((workspace / "pricing.py").exists())
 
     def test_light_gate_passes(self):
         self.prepare("gate-light")
         self.assertEqual("pass", self.gate(LIGHT_BRIEF)["status"])
-        self.assertEqual("pass", self.gate(LIGHT_BRIEF, tier="Light")["status"])
+        self.assertEqual("incomplete", self.gate(LIGHT_BRIEF, tier="Light")["status"])
 
     def test_full_gate_passes_with_one_diagram(self):
         self.prepare("gate-full")
         brief = FULL_BRIEF.replace("\n\n", "\n\n" + MERMAID, 1)
-        self.assertEqual("pass", self.gate(brief, [OVERWRITE, APPROVAL])["status"])
+        self.assertEqual("pass", self.gate(brief)["status"])
 
     def test_light_budget_is_8_lines_and_700_characters(self):
         self.prepare("gate-light")
@@ -161,7 +162,7 @@ class GraderTests(unittest.TestCase):
         missing = FULL_BRIEF.replace(EFFECTS, "")
         late = missing + "\n\n" + EFFECTS.strip()
         for brief in (missing, late):
-            self.assertEqual(["order"], self.failed(self.gate(brief, [OVERWRITE, APPROVAL])))
+            self.assertEqual(["order"], self.failed(self.gate(brief)))
 
     def test_bookkeeping_headings_stay_out_of_the_brief(self):
         self.prepare("gate-light")
@@ -191,9 +192,9 @@ class GraderTests(unittest.TestCase):
 
     def test_two_way_choice_is_a_default_not_a_question(self):
         self.prepare("gate-full")
-        self.assertEqual(["defaults"], self.failed(self.gate(FULL_BRIEF, [OVERWRITE, TWITTER, APPROVAL])))
+        self.assertEqual(["decisions", "defaults"], self.failed(self.gate(FULL_BRIEF, [OVERWRITE, TWITTER, APPROVAL])))
         unlisted = FULL_BRIEF.replace(TWITTER_DEFAULT, "")
-        self.assertEqual(["defaults"], self.failed(self.gate(unlisted, [OVERWRITE, APPROVAL])))
+        self.assertEqual(["defaults"], self.failed(self.gate(unlisted)))
 
     def test_gate_that_edits_a_file_fails_scope(self):
         workspace = self.prepare("gate-light")
