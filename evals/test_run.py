@@ -33,7 +33,7 @@ LIGHT_BRIEF = (
 EFFECTS = "**Effects:** \u26a0\ufe0f prod data: the sweep rewrites existing profiles after PR 1 deploys.\n\n"
 TWITTER_DEFAULT = "- Also read the legacy Twitter field when the handle is blank.\n"
 FULL_BRIEF = (
-    "> **TL;DR** Store contact handles as lowercase `@name`, then sweep about 41,000 production profiles to match.\n\n"
+    "> **TL;DR** Store contact handles in one lowercase form, then fix about 41,000 existing production profiles to match.\n\n"
     + EFFECTS
     + "**Decision:** copy old handles before the sweep (Recommended, reversible) or overwrite in place (one-way).\n\n"
     "**Defaults I'm taking**\n" + TWITTER_DEFAULT + "- PR 2 stacks on PR 1.\n\n"
@@ -169,6 +169,21 @@ class GraderTests(unittest.TestCase):
         for heading in ("## Routes and identities", "**Runtime assumptions**", "### Audit dispositions"):
             with self.subTest(heading):
                 self.assertEqual(["bookkeeping"], self.failed(self.gate(LIGHT_BRIEF + "\n" + heading)))
+
+    def test_tldr_is_one_plain_sentence(self):
+        self.prepare("gate-light")
+        tldr = "> **TL;DR** Name the fee limit and fees as constants so the bands read clearly; fees stay the same."
+        for replacement in (
+            "> **TL;DR** Move `WEIGHT_LIMIT` and both fees into `pricing.py` constants.",
+            tldr + " The bands read the same way after the change.",
+            "> **TL;DR** " + "Name the fee limit and fees as constants " * 6 + "so the bands read clearly.",
+        ):
+            with self.subTest(replacement):
+                self.assertEqual(["tldr"], self.failed(self.gate(LIGHT_BRIEF.replace(tldr, replacement))))
+
+    def test_merge_and_deploy_are_the_users_actions_not_run_effects(self):
+        self.prepare("gate-light")
+        self.assertEqual(["effects"], self.failed(self.gate(LIGHT_BRIEF, effects=["deploy"])))
 
     def test_full_gate_asks_at_most_three_one_way_decisions(self):
         self.prepare("gate-full")

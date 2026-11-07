@@ -18,7 +18,7 @@
 Pure function, no state, no persistence.
 
 ## Permitted effects
-Commits on the task branch and one PR. Nothing else.
+Commits on the task branch and one PR. Nothing else. Merging to main deploys automatically; the user merges after review.
 
 ## Audit dispositions
 gpt-6-luna, 1 round: READY. 0 accepted, 0 rejected.
