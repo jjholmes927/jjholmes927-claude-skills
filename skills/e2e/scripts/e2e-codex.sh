@@ -2,11 +2,19 @@
 set -uo pipefail
 
 usage() {
+  trap - EXIT
   echo "usage: e2e-codex.sh run <workdir> <effort> <prompt-file>" >&2
   echo "       e2e-codex.sh resume <workdir> <session-id> <effort> <prompt-file>" >&2
   echo "       e2e-codex.sh review <workdir> [codex-review-args...]" >&2
   echo "       e2e-codex.sh audit <workdir> <prompt-file>" >&2
   exit 2
+}
+
+HERE=$(cd "$(dirname "$0")" && pwd)
+. "$HERE/ledger.sh"
+
+record() {
+  (cd "${workdir:-.}" 2>/dev/null && emit codex_run "mode=$cmd" "model=$model" "exit=$1" "seconds=$(( $(date +%s) - started ))") >/dev/null 2>&1
 }
 
 thread_id_from() {
@@ -32,6 +40,8 @@ case "$cmd" in
   *) usage ;;
 esac
 [[ -n "$model" ]] || { echo "e2e-codex: select E2E_IMPLEMENTER_MODEL or E2E_REVIEWER_MODEL for this route" >&2; exit 2; }
+started=$(date +%s)
+trap 'record "$?"' EXIT
 
 case "$cmd" in
   run)
