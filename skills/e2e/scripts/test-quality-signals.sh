@@ -64,6 +64,8 @@ echo "    * (HighComplexity) Thing#call has a flog score of 47"
 echo "      - app/models/thing.rb:6"
 echo "    * (VeryHighComplexity) Thing#old has a flog score of 61"
 echo "      - app/models/thing.rb:2"
+echo "    * (HighComplexity) Thing#last has a flog score of 30"
+echo "      - app/models/thing.rb:10"
 echo "Fine:"
 echo "  Rating:       A"
 SHIM
@@ -80,11 +82,11 @@ git init -q -b main
 mkdir -p app/hooks app/other app/api app/models app/__tests__ db
 echo "export const copy = 1" > app/other/copy.ts
 printf 'export function useThing() {\n  const a = 1\n  const b = 2\n  const c = 3\n  return a\n}\n\nexport function other() {\n  return 2\n}\n' > app/hooks/thing.ts
-printf 'class Thing\n  def old\n    1\n  end\n\n  def call\n    2\n  end\nend\n' > app/models/thing.rb
+printf 'class Thing\n  def old\n    1\n  end\n\n  def call\n    2\n  end\n\n  def last\n    4\n  end\n\n  LIMIT = 1\nend\n' > app/models/thing.rb
 git add . && git -c user.name=t -c user.email=t@t commit -qm base
 git switch -q -c feature
 sed -i.bak 's/return a/return b/' app/hooks/thing.ts && rm app/hooks/thing.ts.bak
-sed -i.bak 's/^    2$/    3/' app/models/thing.rb && rm app/models/thing.rb.bak
+sed -i.bak -e 's/^    2$/    3/' -e 's/LIMIT = 1/LIMIT = 2/' app/models/thing.rb && rm app/models/thing.rb.bak
 printf '// DO NOT MODIFY: generated\nexport const api = 1\n' > app/api/gen-api.ts
 echo "test('x', () => {})" > app/__tests__/thing.test.ts
 printf '# This file is auto-generated from the current state of the database. Instead\n# of editing this file, please use the migrations feature of Active Record.\nActiveRecord::Schema[8.0].define(version: 1) do\nend\n' > db/schema.rb
@@ -106,6 +108,7 @@ contains "report lists the F class" '- F: `Thing`' "$report"
 contains "report marks the complex method the branch changed" '- Thing#call has a flog score of 47 (`app/models/thing.rb:6`) (changed by this branch)' "$report"
 assert "report lists the very complex method, unmarked" '- Thing#old has a flog score of 61 (`app/models/thing.rb:2`)' "$(grep 'Thing#old' <<< "$report")"
 assert "report lists changed code first" "Thing#call" "$(grep -m 1 -o 'Thing#[a-z]*' <<< "$report")"
+assert "a change after a method's end doesn't mark it" '- Thing#last has a flog score of 30 (`app/models/thing.rb:10`)' "$(grep 'Thing#last' <<< "$report")"
 contains "report says which items are findings" "Items marked (changed by this branch) are findings to fix in this branch" "$report"
 assert "crapper scores only changed source" "crapper --use-existing-coverage app/hooks/thing.ts" "$(grep '^crapper' "$TOOL_LOG")"
 assert "dryer scans the changed file's top-level folder" "dryer app" "$(grep '^dryer' "$TOOL_LOG")"
@@ -116,7 +119,7 @@ assert "temporary reek config is removed" "no" "$([[ -e .reek.yml ]] && echo yes
 assert "tool output folders are removed" "no" "$([[ -e .metrics ]] && echo yes || echo no)"
 assert "working tree stays clean" "" "$(git status --porcelain)"
 contains "run is recorded" '"event": "quality_signals_run"' "$(cat "$LEDGER")"
-contains "run records the counts" '"crap_30_plus": 1, "crap_10_30": 1, "duplicates": 2, "ruby_flagged": 3, "changed_code_flags": 2' "$(cat "$LEDGER")"
+contains "run records the counts" '"crap_30_plus": 1, "crap_10_30": 1, "duplicates": 2, "ruby_flagged": 4, "changed_code_flags": 2' "$(cat "$LEDGER")"
 contains "run records the machine name" '"host.name": "test-host"' "$(cat "$LEDGER")"
 
 printf '{"scripts": {"test": "vitest --project=unit --run"}}\n' > package.json

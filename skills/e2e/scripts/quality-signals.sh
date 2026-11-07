@@ -64,19 +64,19 @@ skipped() {
 }
 
 touches() {
-  awk -F'\t' -v file="$1" -v from="$2" -v to="$3" \
-    '$1 == file && $2 + 0 <= to + 0 && $3 + 0 >= from + 0 {found = 1} END {exit !found}' "$work/changed-lines"
-}
-
-in_changed_lines() {
   local file=${1%%:*} range=${1#*:}
-  touches "$file" "${range%-*}" "${range#*-}"
+  awk -F'\t' -v file="$file" -v from="${range%-*}" -v to="${range#*-}" \
+    '$1 == file && $2 <= to && $3 >= from {found = 1} END {exit !found}' "$work/changed-lines"
 }
 
 method_changed() {
-  local end
-  end=$(awk -v start="$2" 'NR > start + 0 && /^[[:space:]]*def[[:space:]]/ {print NR - 1; found = 1; exit} END {if (!found) print NR}' "$1" 2>/dev/null) || return 1
-  touches "$1" "$2" "$end"
+  local file=${1%%:*} start=${1##*:} end
+  end=$(awk -v start="$start" '
+    NR == start {match($0, /^[[:space:]]*/); closing = "^" substr($0, 1, RLENGTH) "end([[:space:]]|$)"}
+    NR > start && $0 ~ closing {print NR; found = 1; exit}
+    END {if (!found) print start}
+  ' "$file" 2>/dev/null) || return 1
+  touches "$file:$start-$end"
 }
 
 changed_first() {
@@ -158,7 +158,7 @@ if [[ -s "$work/scored" ]] && available dryer; then
     skipped "$left_file" && continue
     skipped "$right_file" && continue
     suffix=""
-    if in_changed_lines "$left" || in_changed_lines "$right"; then suffix=" $mark"; fi
+    if touches "$left" || touches "$right"; then suffix=" $mark"; fi
     printf -- '- score %s: `%s` and `%s`%s\n' "$score" "$left" "$right" "$suffix" >> "$work/dupes"
   done < "$work/pairs"
   duplicates=$(wc -l < "$work/dupes" | tr -d ' ')
@@ -171,12 +171,11 @@ if [[ -s "$work/ruby" ]] && available rubycritic; then
   xargs rubycritic --no-browser --format console --churn-after "$(date +%F)" --path "$work/rubycritic" < "$work/ruby" > "$work/rubycritic.out" 2>&1
   awk '/^[A-Za-z0-9_:]+:$/ {name=$0; sub(/:$/, "", name)} /^ +Rating: +[DF]$/ {print "- " $2 ": `" name "`"}' "$work/rubycritic.out" > "$work/ruby-classes"
   awk '/\((Very)?HighComplexity\)/ {text=$0; sub(/^ *\* \((Very)?HighComplexity\) /, "", text); getline where; sub(/^ *- */, "", where); print $NF "\t" text "\t" where}' "$work/rubycritic.out" \
-    | sort -rn > "$work/ruby-smells"
-  while IFS=$'\t' read -r _ text where; do
+    | sort -rn | while IFS=$'\t' read -r _ text where; do
     suffix=""
-    if method_changed "${where%%:*}" "${where##*:}"; then suffix=" $mark"; fi
+    if method_changed "$where"; then suffix=" $mark"; fi
     printf -- '- %s (`%s`)%s\n' "$text" "$where" "$suffix"
-  done < "$work/ruby-smells" > "$work/ruby-complex"
+  done > "$work/ruby-complex"
   ruby_flagged=$(cat "$work/ruby-classes" "$work/ruby-complex" | wc -l | tr -d ' ')
   grep -qE 'Rating:' "$work/rubycritic.out" || echo "rubycritic: ran but rated nothing ($(tail -n 1 "$work/rubycritic.out"))" >> "$work/not-run"
 fi
