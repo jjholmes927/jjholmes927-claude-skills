@@ -117,10 +117,12 @@ Contributions welcome! To add a new skill:
 
 ## Workflow evaluations
 
-`evals/` contains ten starter cases: seven stage decisions using snapshots of the
-current workflow documents, paired defective/correct code reviews, and a small
-implementation checked by independent behavioural assertions. Python 3 and Git
-are the only dependencies for preparation and grading.
+`evals/` contains fourteen cases: nine stage decisions using snapshots of the
+current workflow documents, two `/e2e` plan gates, paired defective/correct code
+reviews, and a small implementation checked by independent behavioural
+assertions. Python 3 and Git are the only dependencies for preparation and
+grading. Gate cases hand the agent a plan fixture from `evals/fixtures/` and grade
+its brief on tier, effects, line and character budget, order and decision limits.
 
 ```bash
 python3 -B -m unittest discover -s evals -p 'test_*.py'
