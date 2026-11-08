@@ -64,9 +64,10 @@ GATE_SCHEMA = {
     "required": SCHEMA["required"] + list(GATE_FIELDS),
     "properties": {**SCHEMA["properties"], **GATE_FIELDS},
 }
-BUDGETS = {"light": (700, 8), "full": (2000, 25)}
-TLDR = "> **TL;DR**"
-TLDR_CHARS = 200
+BUDGETS = {"light": (800, 10), "full": (2000, 25)}
+WHAT = "> **What:**"
+WHY = "> **Why:**"
+WHAT_WHY_CHARS = 160
 SKIM_MARKER = "**Done when**"
 EFFECT_IDS = {"prod_data", "migration", "deploy", "external_message", "permission", "spend"}
 SKIM_LIMITS = {"done": 4, "how": 3, "chars": 120}
@@ -185,12 +186,33 @@ def valid_decision(decision):
 
 
 def visible_lines(brief):
-    text = re.sub(r"```mermaid\n.*?```\n?", "", brief, count=1, flags=re.S)
+    text = re.sub(r"```mermaid\n.*?```\n{0,2}", "", brief, count=1, flags=re.S)
     return text, [line.strip() for line in text.splitlines() if line.strip()]
 
 
-def bullets(section):
-    return [line.strip()[2:] for line in section.splitlines() if line.strip().startswith("- ")]
+def done_items(section):
+    lines = [line.strip() for line in section.splitlines() if line.strip().startswith("- ")]
+    items = [line[6:] for line in lines if re.match(r"- \[[ xX]\] ", line)]
+    return items if len(items) == len(lines) and all(re.match(r"\*\*[^*]{2,40}\*\* ", i) for i in items) else []
+
+
+def how_items(section):
+    lines = [line.strip() for line in section.splitlines() if re.match(r"\s*(- |\d+\. )", line)]
+    items = [re.sub(r"^\d+\. ", "", line) for line in lines if re.match(r"\d+\. ", line)]
+    return items if len(items) == len(lines) and not any("**" in i for i in items) else []
+
+
+def one_plain_sentence(text, limit):
+    return bool(text) and "`" not in text and len(text) <= limit and len(re.findall(r"[.!?](?=\s|$)", text)) <= 1
+
+
+def what_why(lines):
+    quoted = [line for line in lines if line != ">"]
+    start = next((i for i, line in enumerate(quoted[:3]) if line.startswith(WHAT)), None)
+    if start is None or start + 1 >= len(quoted) or not quoted[start + 1].startswith(WHY):
+        return False
+    parts = (quoted[start].removeprefix(WHAT).strip(), quoted[start + 1].removeprefix(WHY).strip())
+    return all(one_plain_sentence(part, WHAT_WHY_CHARS) for part in parts)
 
 
 def split_skim(text):
@@ -204,12 +226,24 @@ def split_skim(text):
 
 def plain_skim(skim):
     done, how_marker, how = skim.partition("**How**")
-    items = bullets(done) + bullets(how)
+    items = done_items(done) + how_items(how)
     return (
         bool(how_marker)
-        and 1 <= len(bullets(done)) <= SKIM_LIMITS["done"]
-        and 1 <= len(bullets(how)) <= SKIM_LIMITS["how"]
+        and 1 <= len(done_items(done)) <= SKIM_LIMITS["done"]
+        and 1 <= len(how_items(how)) <= SKIM_LIMITS["how"]
         and all(len(item) <= SKIM_LIMITS["chars"] and "`" not in item for item in items)
+    )
+
+
+BLOCK_START = re.compile(r"^(?:> \*\*What|\*\*(?:Effects|Decision|Defaults|Done when|How)\b|\|)")
+
+
+def blocks_separated(top):
+    lines = top.splitlines()
+    return all(
+        i == 0 or not lines[i - 1].strip() or (line.startswith("|") and lines[i - 1].startswith("|"))
+        for i, line in enumerate(lines)
+        if BLOCK_START.match(line)
     )
 
 
@@ -226,14 +260,14 @@ def grade_gate(case, response):
     others = [d for d in decisions if d not in approvals]
     choice = case.get("two_way_choice", "")
     max_chars, max_lines = BUDGETS[tier]
-    tldr = lines[0].removeprefix(TLDR).strip() if lines and lines[0].startswith(TLDR) else ""
     return {
         "tier": response["tier"] == tier,
         "effects": set(case["expected_effects"]) == EFFECT_IDS & set(response["effects"]),
         "budget": len(text) <= max_chars and len(lines) <= max_lines,
-        "order": bool(tldr) and first_row is not None and effects_first,
-        "tldr": bool(tldr) and "`" not in tldr and len(tldr) <= TLDR_CHARS and len(re.findall(r"[.!?](?=\s|$)", tldr)) <= 1,
+        "order": first_row is not None and effects_first,
+        "what_why": what_why(lines),
         "bookkeeping": not BOOKKEEPING.search(brief),
+        "blocks": blocks_separated(top),
         "skim": before_tasks and plain_skim(skim),
         "decisions": len(others) <= (3 if tier == "full" else 0)
         and all(any(not o["reversible"] for o in d["options"]) for d in others)
@@ -241,7 +275,7 @@ def grade_gate(case, response):
         "approval": len(approvals) == 1
         and {"Approve (Recommended)", "Revise", "Talk first"} <= {o["label"] for o in approvals[0]["options"]},
         "defaults": not choice or (
-            choice.lower() not in json.dumps(decisions).lower()
+            choice.lower() not in json.dumps(others).lower()
             and bool(re.search(r"defaults i.m taking.*" + re.escape(choice), brief, re.I | re.S))
         ),
     }
