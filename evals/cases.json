@@ -110,7 +110,7 @@
       "skills/e2e/SKILL.md"
     ],
     "fixture": "gate-light-plan.md",
-    "task": "You are the /e2e coordinator in Kandev at Stage 1 step 7. PLAN.md is this task's audited plan. Return action gated with the gate you would present now: its tier, the effect ids it touches, the brief and skim layer exactly as they would top the Kandev plan, stopping before the divider, and every question you would ask, in decisions. Make no changes.",
+    "task": "You are the /e2e coordinator in Kandev at Stage 1 step 7. PLAN.md is this task's audited plan. Return action gated with the gate you would present now: its tier, the effect ids it touches, the top of the Kandev plan (brief with its skim layer) exactly as you would write it, stopping before the divider, and every question you would ask, in decisions. Make no changes.",
     "expected_tier": "light",
     "expected_effects": []
   },
@@ -121,7 +121,7 @@
       "skills/e2e/SKILL.md"
     ],
     "fixture": "gate-full-plan.md",
-    "task": "You are the /e2e coordinator in Kandev at Stage 1 step 7. PLAN.md is this task's audited plan. Return action gated with the gate you would present now: its tier, the effect ids it touches, the brief and skim layer exactly as they would top the Kandev plan, stopping before the divider, and every question you would ask, in decisions. Make no changes.",
+    "task": "You are the /e2e coordinator in Kandev at Stage 1 step 7. PLAN.md is this task's audited plan. Return action gated with the gate you would present now: its tier, the effect ids it touches, the top of the Kandev plan (brief with its skim layer) exactly as you would write it, stopping before the divider, and every question you would ask, in decisions. Make no changes.",
     "expected_tier": "full",
     "expected_effects": [
       "prod_data"
