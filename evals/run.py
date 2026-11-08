@@ -67,6 +67,9 @@ GATE_SCHEMA = {
 BUDGETS = {"light": (700, 8), "full": (2000, 25)}
 TLDR = "> **TL;DR**"
 TLDR_CHARS = 200
+SKIM_MARKER = "**Done when**"
+EFFECT_IDS = {"prod_data", "migration", "deploy", "external_message", "permission", "spend"}
+SKIM_LIMITS = {"done": 4, "how": 3, "chars": 120}
 BOOKKEEPING = re.compile(r"^\s*(?:#+\s*|\*\*)(?:routes and identities|permitted effects|runtime assumptions|dependency constraints|audit dispositions)", re.I | re.M)
 REQUIREMENTS = """delivery_fee(weight_grams) accepts integer weights.
 Non-positive weights raise ValueError.
@@ -186,10 +189,25 @@ def visible_lines(brief):
     return text, [line.strip() for line in text.splitlines() if line.strip()]
 
 
+def bullets(section):
+    return [line.strip()[2:] for line in section.splitlines() if line.strip().startswith("- ")]
+
+
+def plain_skim(skim):
+    done, how_marker, how = skim.split("\n---", 1)[0].partition("**How**")
+    items = bullets(done) + bullets(how)
+    return (
+        bool(how_marker)
+        and 1 <= len(bullets(done)) <= SKIM_LIMITS["done"]
+        and 1 <= len(bullets(how)) <= SKIM_LIMITS["how"]
+        and all(len(item) <= SKIM_LIMITS["chars"] and "`" not in item for item in items)
+    )
+
+
 def grade_gate(case, response):
     tier = case["expected_tier"]
-    brief = response["brief"]
-    text, lines = visible_lines(brief)
+    brief, marker, skim = response["brief"].partition(SKIM_MARKER)
+    text, lines = visible_lines(brief.rstrip())
     first_row = next((i for i, line in enumerate(lines) if line.startswith("|")), None)
     first_effects = next((i for i, line in enumerate(lines) if "Effects:" in line and not line.startswith("|")), None)
     effects_first = tier == "light" or (first_row is not None and first_effects is not None and first_effects < first_row)
@@ -201,11 +219,12 @@ def grade_gate(case, response):
     tldr = lines[0].removeprefix(TLDR).strip() if lines and lines[0].startswith(TLDR) else ""
     return {
         "tier": response["tier"] == tier,
-        "effects": set(case["expected_effects"]) == set(response["effects"]),
+        "effects": set(case["expected_effects"]) == EFFECT_IDS & set(response["effects"]),
         "budget": len(text) <= max_chars and len(lines) <= max_lines,
         "order": bool(tldr) and first_row is not None and effects_first,
         "tldr": bool(tldr) and "`" not in tldr and len(tldr) <= TLDR_CHARS and len(re.findall(r"[.!?](?=\s|$)", tldr)) <= 1,
         "bookkeeping": not BOOKKEEPING.search(brief),
+        "skim": bool(marker) and plain_skim(skim),
         "decisions": len(others) <= (3 if tier == "full" else 0)
         and all(any(not o["reversible"] for o in d["options"]) for d in others)
         and all(d["options"] and "(Recommended)" in d["options"][0]["label"] for d in decisions),
