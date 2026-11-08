@@ -40,6 +40,10 @@ FULL_BRIEF = (
     "| # | Task | Effort |\n|---|---|---|\n| 1 | Normalise handles on save | low |\n| 2 | Sweep rake task | low |\n\n"
     "Audit: REVISE, 2 accepted, 1 rejected. Bookkeeping: `.e2e/handoff.md`."
 )
+SKIM = (
+    "**Done when**\n- Fee bands read from named constants.\n- Every fee stays exactly the same.\n\n"
+    "**How**\n- Move the limit and both fees to the top of the pricing module.\n"
+)
 MERMAID = "```mermaid\nflowchart LR\n  Save --> Sweep\n```\n"
 
 
@@ -64,7 +68,8 @@ class GraderTests(unittest.TestCase):
         (self.directory / "response.json").write_text(json.dumps(response))
         return run.grade(self.case, self.directory)
 
-    def gate(self, brief, decisions=None, **overrides):
+    def gate(self, brief, decisions=None, skim=SKIM, **overrides):
+        brief = brief + "\n\n" + skim if skim else brief
         if decisions is None:
             decisions = [OVERWRITE, APPROVAL] if self.case["expected_tier"] == "full" else [APPROVAL]
         fields = {"tier": self.case["expected_tier"], "effects": self.case["expected_effects"], **overrides}
@@ -181,9 +186,28 @@ class GraderTests(unittest.TestCase):
             with self.subTest(replacement):
                 self.assertEqual(["tldr"], self.failed(self.gate(LIGHT_BRIEF.replace(tldr, replacement))))
 
+    def test_skim_layer_follows_the_brief_in_plain_words(self):
+        self.prepare("gate-light")
+        long_line = "- " + "Fee bands read from named constants " * 4 + "everywhere.\n"
+        for skim in (
+            "",
+            "**Done when**\n" + "- Fee bands read from named constants.\n" * 5 + "\n**How**\n- Move them.\n",
+            "**Done when**\n- Fee bands read from named constants.\n",
+            SKIM.replace("named constants", "`WEIGHT_LIMIT`"),
+            SKIM.replace("- Every fee stays exactly the same.\n", long_line),
+        ):
+            with self.subTest(skim):
+                self.assertEqual(["skim"], self.failed(self.gate(LIGHT_BRIEF, skim=skim)))
+
+    def test_agent_detail_after_the_divider_is_not_graded_as_skim(self):
+        self.prepare("gate-light")
+        detail = "\n---\n\n## Agent detail\n" + "- `pricing.py` keeps its signature.\n" * 6
+        self.assertEqual("pass", self.gate(LIGHT_BRIEF, skim=SKIM + detail)["status"])
+
     def test_merge_and_deploy_are_the_users_actions_not_run_effects(self):
         self.prepare("gate-light")
         self.assertEqual(["effects"], self.failed(self.gate(LIGHT_BRIEF, effects=["deploy"])))
+        self.assertEqual("pass", self.gate(LIGHT_BRIEF, effects=["branch", "pr"])["status"])
 
     def test_full_gate_asks_at_most_three_one_way_decisions(self):
         self.prepare("gate-full")
