@@ -122,7 +122,8 @@ current workflow documents, two `/e2e` plan gates, paired defective/correct code
 reviews, and a small implementation checked by independent behavioural
 assertions. Python 3 and Git are the only dependencies for preparation and
 grading. Gate cases hand the agent a plan fixture from `evals/fixtures/` and grade
-its brief on tier, effects, line and character budget, order, decision limits and the plain skim layer.
+its brief on tier, effects, line and character budget, order, the What/Why
+lines, decision limits and the checklist skim layer.
 
 ```bash
 python3 -B -m unittest discover -s evals -p 'test_*.py'

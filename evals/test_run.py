@@ -24,25 +24,35 @@ TWITTER = {"question": "Also read the legacy Twitter field?", "options": [
     {"label": "Yes (Recommended)", "consequence": "More handles get filled", "reversible": True},
     {"label": "No", "consequence": "Blank handles stay blank", "reversible": True},
 ]}
+LIGHT_WHAT_WHY = (
+    "> **What:** Name the fee limit and both fees so the bands read clearly.\n"
+    "> **Why:** Fees stay exactly the same, but the code now says what each number is.\n\n"
+)
 LIGHT_BRIEF = (
-    "> **TL;DR** Name the fee limit and fees as constants so the bands read clearly; fees stay the same.\n\n"
-    "| # | Task | Effort |\n|---|---|---|\n| 1 | Move limit and fees into constants | low |\n"
+    "Light gate · 2 tasks · audit: ready\n\n"
+    + LIGHT_WHAT_WHY
+    + "| # | Task | Effort |\n|---|---|---|\n| 1 | Move limit and fees into constants | low |\n"
     "| 2 | Pin the constants with a test | low |\n\n"
     "Audit: READY, 0 accepted, 0 rejected. Bookkeeping: `.e2e/handoff.md`."
 )
 EFFECTS = "**Effects:** \u26a0\ufe0f prod data: the sweep rewrites existing profiles after PR 1 deploys.\n\n"
-TWITTER_DEFAULT = "- Also read the legacy Twitter field when the handle is blank.\n"
+TWITTER_DEFAULT = "also read the legacy Twitter field when the handle is blank · "
+FULL_WHAT_WHY = (
+    "> **What:** Store contact handles in one lowercase form and fix about 41,000 existing profiles to match.\n"
+    "> **Why:** Mixed formats stop people finding each other by handle.\n\n"
+)
 FULL_BRIEF = (
-    "> **TL;DR** Store contact handles in one lowercase form, then fix about 41,000 existing production profiles to match.\n\n"
+    "Full gate · 2 tasks · audit: 2 fixes taken\n\n"
+    + FULL_WHAT_WHY
     + EFFECTS
     + "**Decision:** copy old handles before the sweep (Recommended, reversible) or overwrite in place (one-way).\n\n"
-    "**Defaults I'm taking**\n" + TWITTER_DEFAULT + "- PR 2 stacks on PR 1.\n\n"
+    "**Defaults I'm taking:** " + TWITTER_DEFAULT + "PR 2 stacks on PR 1.\n\n"
     "| # | Task | Effort |\n|---|---|---|\n| 1 | Normalise handles on save | low |\n| 2 | Sweep rake task | low |\n\n"
     "Audit: REVISE, 2 accepted, 1 rejected. Bookkeeping: `.e2e/handoff.md`."
 )
 SKIM = (
-    "**Done when**\n- Fee bands read from named constants.\n- Every fee stays exactly the same.\n\n"
-    "**How**\n- Move the limit and both fees to the top of the pricing module.\n"
+    "**Done when**\n- [ ] **Named fee bands** read from constants.\n- [ ] **Same fees** for every weight.\n\n"
+    "**How**\n1. Move the limit and both fees to the top of the pricing module.\n"
 )
 MERMAID = "```mermaid\nflowchart LR\n  Save --> Sweep\n```\n"
 
@@ -133,14 +143,14 @@ class GraderTests(unittest.TestCase):
 
     def test_full_gate_passes_with_one_diagram(self):
         self.prepare("gate-full")
-        brief = FULL_BRIEF.replace("\n\n", "\n\n" + MERMAID, 1)
+        brief = FULL_BRIEF.replace(FULL_WHAT_WHY, FULL_WHAT_WHY + MERMAID + "\n", 1)
         self.assertEqual("pass", self.gate(brief)["status"])
 
-    def test_light_budget_is_8_lines_and_700_characters(self):
+    def test_light_budget_is_10_lines_and_800_characters(self):
         self.prepare("gate-light")
-        self.assertEqual("pass", self.gate(sized(LIGHT_BRIEF, 8, 700))["status"])
-        self.assertEqual(["budget"], self.failed(self.gate(sized(LIGHT_BRIEF, 9, 700))))
-        self.assertEqual(["budget"], self.failed(self.gate(sized(LIGHT_BRIEF, 8, 701))))
+        self.assertEqual("pass", self.gate(sized(LIGHT_BRIEF, 10, 800))["status"])
+        self.assertEqual(["budget"], self.failed(self.gate(sized(LIGHT_BRIEF, 11, 800))))
+        self.assertEqual(["budget"], self.failed(self.gate(sized(LIGHT_BRIEF, 10, 801))))
 
     def test_full_budget_is_25_lines_and_2000_characters_besides_one_diagram(self):
         self.prepare("gate-full")
@@ -151,9 +161,9 @@ class GraderTests(unittest.TestCase):
         self.assertEqual(["budget"], self.failed(self.gate(sized(FULL_BRIEF, 26, 2000), decisions)))
         self.assertEqual(["budget"], self.failed(self.gate(sized(FULL_BRIEF, 25, 2001), decisions)))
 
-    def test_route_in_the_tldr_is_harmless(self):
+    def test_route_in_the_what_line_is_harmless(self):
         self.prepare("gate-light")
-        brief = LIGHT_BRIEF.replace("fees stay the same", "the route and fees stay the same")
+        brief = LIGHT_BRIEF.replace("so the bands read clearly", "so the route and bands read clearly")
         self.assertEqual("pass", self.gate(brief)["status"])
 
     def test_wrong_tier_or_missing_effect_fails(self):
@@ -175,26 +185,58 @@ class GraderTests(unittest.TestCase):
             with self.subTest(heading):
                 self.assertEqual(["bookkeeping"], self.failed(self.gate(LIGHT_BRIEF + "\n" + heading)))
 
-    def test_tldr_is_one_plain_sentence(self):
+    def test_tldr_shape_fails_what_why(self):
         self.prepare("gate-light")
-        tldr = "> **TL;DR** Name the fee limit and fees as constants so the bands read clearly; fees stay the same."
+        tldr = "> **TL;DR** Name the fee limit and both fees so the bands read clearly.\n\n"
+        self.assertEqual(["what_why"], self.failed(self.gate(LIGHT_BRIEF.replace(LIGHT_WHAT_WHY, tldr))))
+
+    def test_what_and_why_are_one_plain_sentence_each(self):
+        self.prepare("gate-light")
+        what = "> **What:** Name the fee limit and both fees so the bands read clearly."
         for replacement in (
-            "> **TL;DR** Move `WEIGHT_LIMIT` and both fees into `pricing.py` constants.",
-            tldr + " The bands read the same way after the change.",
-            "> **TL;DR** " + "Name the fee limit and fees as constants " * 6 + "so the bands read clearly.",
+            "> **What:** Move `WEIGHT_LIMIT` and both fees into `pricing.py` constants.",
+            what + " The bands read the same way after the change.",
+            "> **What:** " + "Name the fee limit and both fees " * 6 + "so the bands read clearly.",
         ):
             with self.subTest(replacement):
-                self.assertEqual(["tldr"], self.failed(self.gate(LIGHT_BRIEF.replace(tldr, replacement))))
+                self.assertEqual(["what_why"], self.failed(self.gate(LIGHT_BRIEF.replace(what, replacement))))
+        why_missing = LIGHT_BRIEF.replace("> **Why:** Fees stay exactly the same, but the code now says what each number is.\n", "")
+        self.assertEqual(["what_why"], self.failed(self.gate(why_missing)))
+
+    def test_title_and_meta_line_may_open_the_brief(self):
+        self.prepare("gate-light")
+        self.assertEqual("pass", self.gate("# NEV-1 · Name the fee bands\n\n" + LIGHT_BRIEF)["status"])
+        self.assertEqual("pass", self.gate(LIGHT_BRIEF.replace("Light gate · 2 tasks · audit: ready\n\n", ""))["status"])
+
+    def test_done_when_items_are_checkboxes_led_by_a_bold_gist(self):
+        self.prepare("gate-light")
+        for done in (
+            "- **Named fee bands** read from constants.\n- **Same fees** for every weight.\n",
+            "- [ ] Named fee bands read from constants.\n- [ ] Same fees for every weight.\n",
+        ):
+            with self.subTest(done):
+                skim = SKIM.replace("- [ ] **Named fee bands** read from constants.\n- [ ] **Same fees** for every weight.\n", done)
+                self.assertEqual(["skim"], self.failed(self.gate(LIGHT_BRIEF, skim=skim)))
+
+    def test_how_is_numbered_plain_steps(self):
+        self.prepare("gate-light")
+        for step in (
+            "- Move the limit and both fees to the top of the pricing module.\n",
+            "1. **Move** the limit and both fees to the top of the pricing module.\n",
+        ):
+            with self.subTest(step):
+                skim = SKIM.replace("1. Move the limit and both fees to the top of the pricing module.\n", step)
+                self.assertEqual(["skim"], self.failed(self.gate(LIGHT_BRIEF, skim=skim)))
 
     def test_skim_layer_follows_the_brief_in_plain_words(self):
         self.prepare("gate-light")
-        long_line = "- " + "Fee bands read from named constants " * 4 + "everywhere.\n"
+        long_line = "- [ ] **Same fees** " + "for every weight band in the pricing module " * 3 + "everywhere.\n"
         for skim in (
             "",
-            "**Done when**\n" + "- Fee bands read from named constants.\n" * 5 + "\n**How**\n- Move them.\n",
-            "**Done when**\n- Fee bands read from named constants.\n",
-            SKIM.replace("named constants", "`WEIGHT_LIMIT`"),
-            SKIM.replace("- Every fee stays exactly the same.\n", long_line),
+            "**Done when**\n" + "- [ ] **Named bands** read from constants.\n" * 5 + "\n**How**\n1. Move them.\n",
+            "**Done when**\n- [ ] **Named bands** read from constants.\n",
+            SKIM.replace("read from constants", "read from `WEIGHT_LIMIT`"),
+            SKIM.replace("- [ ] **Same fees** for every weight.\n", long_line),
         ):
             with self.subTest(skim):
                 self.assertEqual(["skim"], self.failed(self.gate(LIGHT_BRIEF, skim=skim)))
@@ -238,6 +280,11 @@ class GraderTests(unittest.TestCase):
         self.assertEqual(["decisions", "defaults"], self.failed(self.gate(FULL_BRIEF, [OVERWRITE, TWITTER, APPROVAL])))
         unlisted = FULL_BRIEF.replace(TWITTER_DEFAULT, "")
         self.assertEqual(["defaults"], self.failed(self.gate(unlisted)))
+
+    def test_approval_may_restate_the_defaults_it_covers(self):
+        self.prepare("gate-full")
+        covering = {**APPROVAL, "question": "Approve? Approval also covers reading the legacy Twitter field."}
+        self.assertEqual("pass", self.gate(FULL_BRIEF, [OVERWRITE, covering])["status"])
 
     def test_gate_that_edits_a_file_fails_scope(self):
         workspace = self.prepare("gate-light")
