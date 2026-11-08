@@ -186,7 +186,7 @@ def valid_decision(decision):
 
 
 def visible_lines(brief):
-    text = re.sub(r"```mermaid\n.*?```\n?", "", brief, count=1, flags=re.S)
+    text = re.sub(r"```mermaid\n.*?```\n{0,2}", "", brief, count=1, flags=re.S)
     return text, [line.strip() for line in text.splitlines() if line.strip()]
 
 
@@ -235,6 +235,18 @@ def plain_skim(skim):
     )
 
 
+BLOCK_START = re.compile(r"^(?:> \*\*What|\*\*(?:Effects|Decision|Defaults|Done when|How)\b|\|)")
+
+
+def blocks_separated(top):
+    lines = top.splitlines()
+    return all(
+        i == 0 or not lines[i - 1].strip() or (line.startswith("|") and lines[i - 1].startswith("|"))
+        for i, line in enumerate(lines)
+        if BLOCK_START.match(line)
+    )
+
+
 def grade_gate(case, response):
     tier = case["expected_tier"]
     top = re.split(r"^---[ \t]*$", response["brief"], maxsplit=1, flags=re.M)[0]
@@ -255,6 +267,7 @@ def grade_gate(case, response):
         "order": first_row is not None and effects_first,
         "what_why": what_why(lines),
         "bookkeeping": not BOOKKEEPING.search(brief),
+        "blocks": blocks_separated(top),
         "skim": before_tasks and plain_skim(skim),
         "decisions": len(others) <= (3 if tier == "full" else 0)
         and all(any(not o["reversible"] for o in d["options"]) for d in others)

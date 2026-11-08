@@ -54,7 +54,7 @@ SKIM = (
     "**Done when**\n- [ ] **Named fee bands** read from constants.\n- [ ] **Same fees** for every weight.\n\n"
     "**How**\n1. Move the limit and both fees to the top of the pricing module.\n"
 )
-MERMAID = "```mermaid\nflowchart LR\n  Save --> Sweep\n```\n"
+MERMAID = "```mermaid\nflowchart LR\n  Save --> Sweep\n```\n\n"
 
 
 def sized(brief, lines, chars):
@@ -245,6 +245,11 @@ class GraderTests(unittest.TestCase):
         self.prepare("gate-light")
         detail = "\n\n---\n\n## Agent detail\n" + "- `pricing.py` keeps its signature.\n" * 6
         self.assertEqual("pass", self.gate(LIGHT_BRIEF + detail)["status"])
+
+    def test_each_block_is_separated_by_a_blank_line(self):
+        self.prepare("gate-full")
+        squashed = FULL_BRIEF.replace(EFFECTS, EFFECTS.rstrip("\n") + "\n")
+        self.assertEqual(["blocks"], self.failed(self.gate(squashed)))
 
     def test_skim_layer_comes_before_the_task_table(self):
         self.prepare("gate-light")
