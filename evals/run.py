@@ -193,8 +193,17 @@ def bullets(section):
     return [line.strip()[2:] for line in section.splitlines() if line.strip().startswith("- ")]
 
 
+def split_skim(text):
+    head, marker, rest = text.partition(SKIM_MARKER)
+    if not marker:
+        return text, "", False
+    table = re.search(r"^[ \t]*\|", rest, re.M)
+    end = table.start() if table else len(rest)
+    return head + rest[end:], rest[:end], bool(table)
+
+
 def plain_skim(skim):
-    done, how_marker, how = skim.split("\n---", 1)[0].partition("**How**")
+    done, how_marker, how = skim.partition("**How**")
     items = bullets(done) + bullets(how)
     return (
         bool(how_marker)
@@ -206,7 +215,8 @@ def plain_skim(skim):
 
 def grade_gate(case, response):
     tier = case["expected_tier"]
-    brief, marker, skim = response["brief"].partition(SKIM_MARKER)
+    top = re.split(r"^---[ \t]*$", response["brief"], maxsplit=1, flags=re.M)[0]
+    brief, skim, before_tasks = split_skim(top)
     text, lines = visible_lines(brief.rstrip())
     first_row = next((i for i, line in enumerate(lines) if line.startswith("|")), None)
     first_effects = next((i for i, line in enumerate(lines) if "Effects:" in line and not line.startswith("|")), None)
@@ -224,7 +234,7 @@ def grade_gate(case, response):
         "order": bool(tldr) and first_row is not None and effects_first,
         "tldr": bool(tldr) and "`" not in tldr and len(tldr) <= TLDR_CHARS and len(re.findall(r"[.!?](?=\s|$)", tldr)) <= 1,
         "bookkeeping": not BOOKKEEPING.search(brief),
-        "skim": bool(marker) and plain_skim(skim),
+        "skim": before_tasks and plain_skim(skim),
         "decisions": len(others) <= (3 if tier == "full" else 0)
         and all(any(not o["reversible"] for o in d["options"]) for d in others)
         and all(d["options"] and "(Recommended)" in d["options"][0]["label"] for d in decisions),

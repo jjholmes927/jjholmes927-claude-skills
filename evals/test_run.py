@@ -69,7 +69,7 @@ class GraderTests(unittest.TestCase):
         return run.grade(self.case, self.directory)
 
     def gate(self, brief, decisions=None, skim=SKIM, **overrides):
-        brief = brief + "\n\n" + skim if skim else brief
+        brief = brief.replace("| #", skim + "\n| #", 1) if skim else brief
         if decisions is None:
             decisions = [OVERWRITE, APPROVAL] if self.case["expected_tier"] == "full" else [APPROVAL]
         fields = {"tier": self.case["expected_tier"], "effects": self.case["expected_effects"], **overrides}
@@ -201,8 +201,12 @@ class GraderTests(unittest.TestCase):
 
     def test_agent_detail_after_the_divider_is_not_graded_as_skim(self):
         self.prepare("gate-light")
-        detail = "\n---\n\n## Agent detail\n" + "- `pricing.py` keeps its signature.\n" * 6
-        self.assertEqual("pass", self.gate(LIGHT_BRIEF, skim=SKIM + detail)["status"])
+        detail = "\n\n---\n\n## Agent detail\n" + "- `pricing.py` keeps its signature.\n" * 6
+        self.assertEqual("pass", self.gate(LIGHT_BRIEF + detail)["status"])
+
+    def test_skim_layer_comes_before_the_task_table(self):
+        self.prepare("gate-light")
+        self.assertEqual(["skim"], self.failed(self.gate(LIGHT_BRIEF + "\n\n" + SKIM, skim="")))
 
     def test_merge_and_deploy_are_the_users_actions_not_run_effects(self):
         self.prepare("gate-light")
