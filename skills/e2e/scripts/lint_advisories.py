@@ -71,8 +71,10 @@ def finding(repo, tool, rule, path, start, end, severity, message, ranges):
     lines = Path(path).read_text(errors="replace").splitlines()
     if tool == "eslint" and rule == "max-lines":
         start, end = 1, max(len(lines), 1)
-    anchor = lines[start - 1].strip() if 0 < start <= len(lines) else "file"
-    occurrence = sum(line.strip() == anchor for line in lines[:start])
+        anchor, occurrence = "file", 0
+    else:
+        anchor = lines[start - 1].strip() if 0 < start <= len(lines) else "file"
+        occurrence = sum(line.strip() == anchor for line in lines[:start])
     key = json.dumps([repo, tool, rule, path, anchor, occurrence])
     return {"id": hashlib.sha256(key.encode()).hexdigest()[:24], "tool": tool, "rule": rule,
             "path": path, "start": start, "end": end, "severity": severity, "message": message,
