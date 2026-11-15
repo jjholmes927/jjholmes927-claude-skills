@@ -119,6 +119,9 @@ class AdvisoryTests(Fixture):
         ]}])
         report = self.scan()[1]
         self.assertTrue(next(f for f in report["findings"] if f["rule"] == "max-lines")["affected"])
+        identifier = next(f["id"] for f in report["findings"] if f["rule"] == "max-lines")
+        self.write("sample.ts", "'use strict'\n" + (self.repo / "sample.ts").read_text())
+        self.assertEqual(identifier, next(f["id"] for f in self.scan()[1]["findings"] if f["rule"] == "max-lines"))
 
     def test_same_named_methods_have_distinct_ids(self):
         self.write("sample.rb", (self.repo / "sample.rb").read_text().replace("def untouched", "def call"))
