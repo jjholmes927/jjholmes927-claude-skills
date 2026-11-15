@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+from functools import partial
 import hashlib
 import json
 import os
@@ -47,24 +48,25 @@ def policy_hash():
     return hashlib.sha256(b"".join(p.encode() + Path(p).read_bytes() for p in sorted(paths) if Path(p).is_file())).hexdigest()
 
 
+def line_ranges(base, path):
+    ranges = []
+    for line in git("diff", "--no-ext-diff", "--no-color", "-U0", base, "--", path).splitlines():
+        match = re.match(r"@@ .* \+(\d+)(?:,(\d+))? @@", line)
+        if match:
+            start, count = int(match[1]), int(match[2] or 1)
+            ranges.append((max(start, 1), max(start + count - 1, start, 1)))
+    return ranges or [(1, len(Path(path).read_text(errors="replace").splitlines()) or 1)]
+
+
 def changed(base):
     files = git("diff", "--name-only", "--diff-filter=ACMRT", "-z", base).split("\0")
     files += git("ls-files", "--others", "--exclude-standard", "-z").split("\0")
-    ranges = {}
-    for path in files:
-        if not path or not Path(path).is_file():
-            continue
-        for line in git("diff", "--no-ext-diff", "--no-color", "-U0", base, "--", path).splitlines():
-            match = re.match(r"@@ .* \+(\d+)(?:,(\d+))? @@", line)
-            if match:
-                start, count = int(match[1]), int(match[2] or 1)
-                ranges.setdefault(path, []).append((max(start, 1), max(start + count - 1, start, 1)))
-        if path and Path(path).is_file() and path not in ranges:
-            ranges[path] = [(1, len(Path(path).read_text(errors="replace").splitlines()) or 1)]
-    return sorted({p for p in files if p and Path(p).is_file()}), ranges
+    files = sorted({p for p in files if p and Path(p).is_file()})
+    return files, {path: line_ranges(base, path) for path in files}
 
 
 def finding(repo, tool, rule, path, start, end, severity, message, ranges):
+    start, end = int(start), int(end)
     path = str(Path(path).resolve().relative_to(Path.cwd().resolve()))
     lines = Path(path).read_text(errors="replace").splitlines()
     if tool == "eslint" and rule == "max-lines":
@@ -90,6 +92,50 @@ def invoke(tool, command, report_path, parse, report):
         report["tools"][tool] = {"status": "incomplete", "error": f"{type(error).__name__}: {error}"}
 
 
+def rubocop_findings(data, make):
+    return [make("rubocop", offense["cop_name"], file["path"], offense["location"]["start_line"],
+                 offense["location"]["last_line"], offense["severity"], offense["message"])
+            for file in data["files"] for offense in file["offenses"]]
+
+
+def eslint_findings(data, make):
+    if any(message.get("fatal") and not message.get("line") for file in data for message in file["messages"]):
+        raise ValueError("ESLint failed without a source range")
+    return [make("eslint", message.get("ruleId") or "parse-error", file["filePath"], message["line"],
+                 message.get("endLine") or message["line"], "warning" if message["severity"] == 1 else "error", message["message"])
+            for file in data for message in file["messages"] if message["severity"] > 0 and message.get("line")]
+
+
+def duplicate_findings(data, make):
+    items = []
+    for clone in data["duplicates"]:
+        sides = [clone["firstFile"], clone["secondFile"]]
+        message = "Duplicate between " + " and ".join(sorted(side["name"] for side in sides))
+        values = [make("jscpd", "duplication", side["name"], side["start"], side["end"], "advisory", message) for side in sides]
+        value = next((v for v in values if v["affected"]), None)
+        if value:
+            key = json.dumps(["jscpd", sorted(v["id"] for v in values)])
+            value.update(id=hashlib.sha256(key.encode()).hexdigest()[:24], related=sides)
+            items.append(value)
+    return items
+
+
+def configured_tools(files, target):
+    ruby = [p for p in files if Path(p).suffix in {".rb", ".rake"}]
+    javascript = [p for p in files if Path(p).suffix in {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}]
+    package = json.loads(Path("package.json").read_text()) if Path("package.json").exists() else {}
+    runner = ["pnpm", "exec"] if Path("pnpm-lock.yaml").exists() else ["yarn", "exec"] if Path("yarn.lock").exists() else ["npm", "exec", "--no", "--"]
+    if ruby and Path(".rubocop.yml").exists():
+        path = target / "ruby.json"
+        yield "rubocop", ["bundle", "exec", "rubocop", "--no-server", "--format", "json", "--out", str(path), *ruby], path, rubocop_findings
+    if javascript and (list(Path(".").glob("eslint.config.*")) or list(Path(".").glob(".eslintrc*")) or "eslintConfig" in package):
+        path = target / "js.json"
+        yield "eslint", [*runner, "eslint", "--format", "json", "--output-file", str(path), *javascript], path, eslint_findings
+    dependencies = {**package.get("dependencies", {}), **package.get("devDependencies", {})}
+    if (ruby or javascript) and (Path(".jscpd.json").exists() or "jscpd" in dependencies):
+        yield "jscpd", [*runner, "jscpd", "--reporters", "json", "--output", str(target)], target / "jscpd-report.json", duplicate_findings
+
+
 def scan(base, harness, extra=()):
     root = Path(git("rev-parse", "--show-toplevel"))
     os.chdir(root)
@@ -106,47 +152,13 @@ def scan(base, harness, extra=()):
     report = {"version": 1, "collector": collector_hash(), "run_id": str(uuid.uuid4()), "repo": repository(), "base": base,
               "head": git("rev-parse", "HEAD"), "tree": fingerprint(), "policy": policy_hash(),
               "harness": harness, "tools": {}, "files": files, "findings": []}
-    ruby = [p for p in files if Path(p).suffix in {".rb", ".rake"}]
-    javascript = [p for p in files if Path(p).suffix in {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}]
-    package = json.loads(Path("package.json").read_text()) if Path("package.json").exists() else {}
-    runner = ["pnpm", "exec"] if Path("pnpm-lock.yaml").exists() else ["yarn", "exec"] if Path("yarn.lock").exists() else ["npm", "exec", "--no", "--"]
-    def item(tool, rule, path, start, end, severity, message):
-        return finding(report["repo"], tool, rule, path, int(start), int(end), severity, message, ranges)
+    make = partial(finding, report["repo"], ranges=ranges)
     with tempfile.TemporaryDirectory() as directory:
-        target = Path(directory)
-        if ruby and Path(".rubocop.yml").exists():
-            def rubocop(data):
-                return [item("rubocop", offense["cop_name"], file["path"], offense["location"]["start_line"],
-                             offense["location"]["last_line"], offense["severity"], offense["message"])
-                        for file in data["files"] for offense in file["offenses"]]
-            invoke("rubocop", ["bundle", "exec", "rubocop", "--no-server", "--format", "json", "--out", str(target / "ruby.json"), *ruby], target / "ruby.json", rubocop, report)
-        if javascript and (list(Path(".").glob("eslint.config.*")) or list(Path(".").glob(".eslintrc*")) or "eslintConfig" in package):
-            def eslint(data):
-                if any(message.get("fatal") and not message.get("line") for file in data for message in file["messages"]):
-                    raise ValueError("ESLint failed without a source range")
-                return [item("eslint", message.get("ruleId") or "parse-error", file["filePath"], message["line"],
-                             message.get("endLine") or message["line"], "warning" if message["severity"] == 1 else "error", message["message"])
-                        for file in data for message in file["messages"] if message["severity"] > 0 and message.get("line")]
-            invoke("eslint", [*runner, "eslint", "--format", "json", "--output-file", str(target / "js.json"), *javascript], target / "js.json", eslint, report)
-        dependencies = {**package.get("dependencies", {}), **package.get("devDependencies", {})}
-        if (ruby or javascript) and (Path(".jscpd.json").exists() or "jscpd" in dependencies):
-            def clones(data):
-                items = []
-                for clone in data["duplicates"]:
-                    sides = [clone["firstFile"], clone["secondFile"]]
-                    pair = sorted(side["name"] for side in sides)
-                    values = []
-                    for side in sides:
-                        message = "Duplicate between " + " and ".join(pair)
-                        value = item("jscpd", "duplication", side["name"], side["start"], side["end"], "advisory", message)
-                        values.append(value)
-                    value = next((v for v in values if v["affected"]), None)
-                    if value:
-                        key = json.dumps([report["repo"], "jscpd", sorted(v["id"] for v in values)])
-                        value.update(id=hashlib.sha256(key.encode()).hexdigest()[:24], related=sides)
-                        items.append(value)
-                return items
-            invoke("jscpd", [*runner, "jscpd", "--reporters", "json", "--output", str(target)], target / "jscpd-report.json", clones, report)
+        try:
+            for tool, command, path, parser in configured_tools(files, Path(directory)):
+                invoke(tool, command, path, partial(parser, make=make), report)
+        except (OSError, ValueError, TypeError) as error:
+            report["tools"]["configuration"] = {"status": "incomplete", "error": str(error)}
     report["findings"] = list({value["id"]: value for value in report["findings"]}.values())
     report["tree_after"] = fingerprint()
     if report["tree_after"] != report["tree"]:
@@ -154,6 +166,8 @@ def scan(base, harness, extra=()):
     (output / "lint-advisories.json").write_text(json.dumps(report, indent=2) + "\n")
     lines = ["# Lint advisories", "", f"Run `{report['run_id']}` · tree `{report['tree']}`", ""]
     lines += [f"- {tool}: {state['status']}" for tool, state in report["tools"].items()]
+    if not report["tools"]:
+        lines.append("- No configured linters apply to the changed files.")
     lines += [f"- `{value['id']}` {value['tool']}/{value['rule']} `{value['path']}:{value['start']}-{value['end']}`: {value['message']}" for value in report["findings"] if value["affected"]]
     (output / "lint-advisories.md").write_text("\n".join(lines) + "\n")
     return report
