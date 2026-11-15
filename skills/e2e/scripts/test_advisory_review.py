@@ -70,6 +70,25 @@ class ReviewTests(Fixture):
         self.assertEqual(2, self.review("decide", item["id"], "fixed", "Attempted repair").returncode)
         self.assertFalse(any(e["event"] == "quality_advisory_reviewed" for e in self.events()))
 
+    def test_a_different_rule_replacement_in_the_repaired_scope_is_not_a_fix(self):
+        item = self.collect()["findings"][0]
+        self.write("sample.rb", (self.repo / "sample.rb").read_text().replace("updated", "replacement"))
+        self.tool("bundle", {"files": [{"path": "sample.rb", "offenses": [
+            {"cop_name": "Metrics/AbcSize", "severity": "refactor", "message": "Complex replacement", "location": {"start_line": 2, "last_line": 4}}
+        ]}]})
+        self.assertEqual(2, self.review("decide", item["id"], "fixed", "Replaced the original smell").returncode)
+        self.assertFalse(any(e["event"] == "quality_advisory_reviewed" for e in self.events()))
+
+    def test_a_new_advisory_in_another_method_needs_its_own_decision(self):
+        item = self.collect()["findings"][0]
+        self.write("sample.rb", (self.repo / "sample.rb").read_text().replace("updated", "short").replace("same", "changed"))
+        self.tool("bundle", {"files": [{"path": "sample.rb", "offenses": [
+            {"cop_name": "Metrics/AbcSize", "severity": "refactor", "message": "Different method", "location": {"start_line": 6, "last_line": 8}}
+        ]}]})
+        result = self.review("decide", item["id"], "fixed", "Simplified the original method")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(2, self.review("check").returncode)
+
     def test_late_edits_invalidate_review_readiness(self):
         self.collect()
         self.write("sample.rb", (self.repo / "sample.rb").read_text() + "\nCHANGED = true\n")

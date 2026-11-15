@@ -39,11 +39,11 @@ def collect(base, harness, workflow, task_id=None, session_id=None, extra=()):
         report.update({"trace.trace_id": trace[1], "trace.parent_id": trace[2]})
     REPORT.write_text(json.dumps(report, indent=2) + "\n")
     affected = [f for f in report["findings"] if f["affected"]]
-    emit("quality_advisory_scan", report, finding_count=len(affected), scan_exit=lint.exit_status(report),
+    emit("quality_advisory_scan", report, finding_count=len(affected), occurrence_count=sum(f["occurrences"] for f in affected), scan_exit=lint.exit_status(report),
          incomplete_tools=",".join(tool for tool, state in report["tools"].items() if state["status"] != "complete"))
     for item in affected:
         emit("quality_advisory_flagged", report, finding_id=item["id"], tool=item["tool"], rule=item["rule"],
-             path=item["path"], lint_severity=item["severity"])
+             path=item["path"], lint_severity=item["severity"], occurrence_count=item["occurrences"])
     return report
 
 
@@ -68,10 +68,10 @@ def verify_fix(previous, item):
     if lint.exit_status(report) or any(f["id"] == item["id"] for f in report["findings"]):
         raise ValueError("Fresh scan did not verify the fix")
     previous_ids = {f["id"] for f in previous["findings"]}
-    if any(f["affected"] and f["id"] not in previous_ids and
-           (f["tool"], f["rule"], f["path"]) == (item["tool"], item["rule"], item["path"])
+    if any(f["affected"] and f["id"] not in previous_ids and f["path"] == item["path"] and
+           (f["scope"] == item["scope"] or f["start"] <= item["end"] and item["start"] <= f["end"])
            for f in report["findings"]):
-        raise ValueError("A replacement finding remains in the affected file; no verified fix recorded")
+        raise ValueError("A replacement finding remains in the repaired scope; no verified fix recorded")
     if Path(item["path"]).exists() and report["tools"].get(item["tool"], {}).get("status") != "complete":
         raise ValueError("The relevant tool did not complete the verification scan")
     return report

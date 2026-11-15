@@ -11,7 +11,7 @@ event, repo, head, host, *pairs = sys.argv[1:]
 fields = {"event": event, "repo": repo, "head": head, "host.name": host}
 numeric = {"accepted", "dismissed", "changed_files", "crap_30_plus", "crap_10_30",
            "duplicates", "ruby_flagged", "changed_code_flags", "seconds", "exit",
-           "finding_count", "scan_exit", "verified_fix", "unreviewed_count"}
+           "finding_count", "occurrence_count", "scan_exit", "verified_fix", "unreviewed_count"}
 for pair in pairs:
     name, _, value = pair.partition("=")
     fields[name] = int(value) if name in numeric and value.isdigit() else value

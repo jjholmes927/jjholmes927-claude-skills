@@ -34,7 +34,7 @@ Source snippets and review reasons stay local. Available task/session and trace
 context are forwarded; missing trace context is not invented. Delivery failures
 retain the local ledger and are reported. `E2E_LEDGER=off` disables network export.
 
-Count flag events for repeated occurrences, distinct finding IDs for unique
+Sum flag-event `occurrence_count` for repeated occurrences, distinct finding IDs for unique
 findings, and distinct review IDs for decisions. Compare outcomes by rule and
 harness. A justified keep is a completed review; reviewed and fixed are different
 measures. These are workflow events, not proof of cross-harness model quality.

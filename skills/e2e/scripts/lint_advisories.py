@@ -65,19 +65,21 @@ def changed(base):
     return files, {path: line_ranges(base, path) for path in files}
 
 
-def finding(repo, tool, rule, path, start, end, severity, message, ranges):
+def finding(repo, tool, rule, path, start, end, severity, message, ranges, column=1):
     start, end = int(start), int(end)
+    column = int(column or 1)
     path = str(Path(path).resolve().relative_to(Path.cwd().resolve()))
     lines = Path(path).read_text(errors="replace").splitlines()
     if tool == "eslint" and rule == "max-lines":
         start, end = 1, max(len(lines), 1)
-        anchor, occurrence = "file", 0
+        anchor, occurrence, column = "file", 0, 1
     else:
         anchor = lines[start - 1].strip() if 0 < start <= len(lines) else "file"
         occurrence = sum(line.strip() == anchor for line in lines[:start])
-    key = json.dumps([repo, tool, rule, path, anchor, occurrence])
-    return {"id": hashlib.sha256(key.encode()).hexdigest()[:24], "tool": tool, "rule": rule,
-            "path": path, "start": start, "end": end, "severity": severity, "message": message,
+    scope = hashlib.sha256(json.dumps([repo, path, anchor, occurrence, column]).encode()).hexdigest()[:24]
+    key = json.dumps([scope, tool, rule])
+    return {"id": hashlib.sha256(key.encode()).hexdigest()[:24], "scope": scope, "tool": tool, "rule": rule,
+            "path": path, "start": start, "end": end, "column": column, "severity": severity, "message": message,
             "affected": any(left <= end and right >= start for left, right in ranges.get(path, []))}
 
 
@@ -96,7 +98,7 @@ def invoke(tool, command, report_path, parse, report):
 
 def rubocop_findings(data, make):
     return [make("rubocop", offense["cop_name"], file["path"], offense["location"]["start_line"],
-                 offense["location"]["last_line"], offense["severity"], offense["message"])
+                 offense["location"]["last_line"], offense["severity"], offense["message"], column=offense["location"].get("start_column", 1))
             for file in data["files"] for offense in file["offenses"]]
 
 
@@ -104,7 +106,7 @@ def eslint_findings(data, make):
     if any(message.get("fatal") and not message.get("line") for file in data for message in file["messages"]):
         raise ValueError("ESLint failed without a source range")
     return [make("eslint", message.get("ruleId") or "parse-error", file["filePath"], message["line"],
-                 message.get("endLine") or message["line"], "warning" if message["severity"] == 1 else "error", message["message"])
+                 message.get("endLine") or message["line"], "warning" if message["severity"] == 1 else "error", message["message"], column=message.get("column", 1))
             for file in data for message in file["messages"] if message["severity"] > 0 and message.get("line")]
 
 
@@ -113,7 +115,8 @@ def duplicate_findings(data, make):
     for clone in data["duplicates"]:
         sides = [clone["firstFile"], clone["secondFile"]]
         message = "Duplicate between " + " and ".join(sorted(side["name"] for side in sides))
-        values = [make("jscpd", "duplication", side["name"], side["start"], side["end"], "advisory", message) for side in sides]
+        values = [make("jscpd", "duplication", side["name"], side["start"], side["end"], "advisory", message,
+                       column=side.get("startLoc", {}).get("column", 0) + 1) for side in sides]
         value = next((v for v in values if v["affected"]), None)
         if value:
             key = json.dumps(["jscpd", sorted(v["id"] for v in values)])
@@ -161,7 +164,14 @@ def scan(base, harness, extra=()):
                 invoke(tool, command, path, partial(parser, make=make), report)
         except (OSError, ValueError, TypeError) as error:
             report["tools"]["configuration"] = {"status": "incomplete", "error": str(error)}
-    report["findings"] = list({value["id"]: value for value in report["findings"]}.values())
+    unique = {}
+    for value in report["findings"]:
+        if value["id"] in unique:
+            unique[value["id"]]["occurrences"] += 1
+        else:
+            value["occurrences"] = 1
+            unique[value["id"]] = value
+    report["findings"] = list(unique.values())
     report["tree_after"] = fingerprint()
     if report["tree_after"] != report["tree"]:
         report["tools"]["worktree"] = {"status": "incomplete", "error": "Files changed during the scan"}
