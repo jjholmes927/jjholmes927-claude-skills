@@ -181,4 +181,7 @@ It writes local reports under `.e2e/`; successful scans with advisories exit 0,
 blocking findings exit 1 and incomplete scans exit 2. No lint rules are enabled
 or changed by the collector.
 
+Shared E2E and standalone ship also require explicit advisory dispositions;
+see [advisory review](docs/advisory-review.md) for commands, telemetry and limits.
+
 Shared skill content belongs here. Dotfiles owns harness compatibility and installation, and installed caches are generated outputs. Test unpublished changes in temporary targets; after merging a release, run `workflow-sync` from dotfiles to update the marketplace plugin and every installed adapter. Start fresh sessions afterwards. A skill-only change needs no dotfiles commit.

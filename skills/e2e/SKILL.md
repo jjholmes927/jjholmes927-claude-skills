@@ -97,6 +97,12 @@ After the last task checkpoint, the coordinator runs `scripts/quality-signals.sh
 
 Signals never block the run. Copy the report's "Not run or incomplete" lines into the handoff. The tools come from dotfiles (`upstream-skills/tools.txt`).
 
+Set `E2E_HARNESS` to the actual launch harness (`claude`, `codex`, `cursor` or
+`opencode`), and `E2E_TASK_ID` / `E2E_SESSION_ID` when known. The same script
+collects the repository's configured RuboCop, ESLint and jscpd findings into
+`.e2e/lint-advisories.md` and JSON, including changed bodies below unchanged
+declarations. No configured tool is treated as a clean run if it failed.
+
 ## Stage 6 — Comprehensive branch review
 
 Use the selected fresh reviewer to check the whole branch (`base...HEAD`) against approved scope: task coverage, naming, duplication, dead code, structural readability and complexity justified by runtime/dependency constraints.
@@ -111,6 +117,18 @@ Give each reviewer the skill by its installed path when the route can't load ski
 1. Require concrete severity, scenario, file/line and evidence; instruct the reviewer to try to refute each finding and verify with executable reproductions in a scratch directory where possible. Apply the **Architectural Observation Rule**: platform/infra limitations outside ticket scope are recorded as non-blocking observations, not blockers.
 2. Check candidate release increments without their successors; a green final stack does not establish earlier slices' readiness.
 3. One repair loop through the implementer over the merged list: address valid P1/P2 findings, run affected test verification, and update the branch before PR slicing; retain remaining findings explicitly.
+
+Review the affected lint advisories in that same pass. Their thresholds alone do
+not trigger the P2 rule above: justify severity with a concrete defect, and keep
+readable units together when splitting would obscure their purpose. Record each
+decision with `python3 -B ${CLAUDE_PLUGIN_ROOT}/skills/e2e/scripts/advisory_review.py
+decide <finding-id> <fixed|kept|dismissed> '<reason>'` (one shell line). `fixed`
+runs a fresh scan and refuses a claim based on changed lint policy or added
+suppressions. The other outcomes require current code and a reason. Rescan after
+repairs, then run the same entry point with `check` before handoff. Missing
+decisions, stale evidence, tool failures and blocking offenses remain incomplete.
+Decisions stay in `.e2e/lint-decisions.jsonl`; include unresolved items in the
+handoff. Existing review/fix budgets apply; this introduces no extra review stage.
 
 ## Stage 7 — Ship and hand back
 

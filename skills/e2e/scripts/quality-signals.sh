@@ -157,6 +157,11 @@ if [[ -s "$work/ruby" ]] && available rubycritic; then
 fi
 
 for path in $created; do rm -rf "$path"; done
+python3 -B "$HERE/advisory_review.py" scan "$base" --harness "${E2E_HARNESS:-unknown}" > "$work/lint.out" 2>&1
+lint_status=$?
+if [[ $lint_status -ne 0 ]]; then
+  echo "configured lint: review incomplete or blocking findings; see .e2e/lint-advisories.md (exit $lint_status)" >> "$work/not-run"
+fi
 seconds=$(( $(date +%s) - started ))
 scored_count=$(cat "$work/scored" "$work/ruby" | wc -l | tr -d ' ')
 changed_flags=$(cat "$work/dupes" "$work/ruby-complex" 2>/dev/null | grep -cF "$mark")
@@ -165,6 +170,8 @@ changed_flags=$(cat "$work/dupes" "$work/ruby-complex" 2>/dev/null | grep -cF "$
   echo "# Quality signals"
   echo
   echo "Base \`$base\`, head \`$(git rev-parse --short HEAD)\`: $scored_count changed source files, ${seconds}s. Items marked $mark are findings to fix in this branch. crapper can't tell which functions changed, so check its list against the diff. Everything else is a hint."
+  echo
+  echo "Configured lint findings: [.e2e/lint-advisories.md](lint-advisories.md). Each affected advisory needs a recorded decision; a raw lint threshold is not automatically a P2 defect."
   if [[ -n $crapper_ran && -s "$work/crap-rows" ]]; then
     echo
     echo "## Risky functions (crapper)"

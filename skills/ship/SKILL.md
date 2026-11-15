@@ -107,6 +107,16 @@ Format: `prefix: Imperative description`
 
 Every ship verifies behaviour before push — UI or not. Invoke **/verify**: it writes the promise, picks the evidence per change type (UI → verify-ui, telemetry → read-back, API/job → real invocation), and reports ✅/🟡/🔴 with the evidence shown. "Tests pass" is not verification.
 
+Collect configured lint advisories with `python3 -B
+${CLAUDE_PLUGIN_ROOT}/skills/e2e/scripts/advisory_review.py scan "$BASE"
+--harness <actual-harness> --workflow ship` (one shell line). Reuse an E2E report
+only when that entry point's `check` succeeds for the current tree. Read
+`.e2e/lint-advisories.md` and record each affected finding using `decide <id>
+<fixed|kept|dismissed> '<reason>'`. Fixed claims trigger a verification scan;
+thresholds alone do not require extraction or a P2 finding. Resolve blocking
+defects and incomplete tools, and require `check` before publication. After any
+repair, rescan and renew affected decisions; the existing repair budgets apply.
+
 1. **Tooling preflight — repair, don't skip.** If the diff touches UI paths:
    ```bash
    git diff "$BASE"...HEAD --name-only | grep -E '\.(tsx?|jsx?|css|scss)$|^app/javascript/|^app/views/|^app/components/'

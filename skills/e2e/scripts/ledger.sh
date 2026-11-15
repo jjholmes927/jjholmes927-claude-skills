@@ -9,17 +9,20 @@ emit() {
 import json, sys
 event, repo, head, host, *pairs = sys.argv[1:]
 fields = {"event": event, "repo": repo, "head": head, "host.name": host}
+numeric = {"accepted", "dismissed", "changed_files", "crap_30_plus", "crap_10_30",
+           "duplicates", "ruby_flagged", "changed_code_flags", "seconds", "exit",
+           "finding_count", "scan_exit", "verified_fix", "unreviewed_count"}
 for pair in pairs:
     name, _, value = pair.partition("=")
-    fields[name] = int(value) if value.isdigit() else value
+    fields[name] = int(value) if name in numeric and value.isdigit() else value
 print(json.dumps(fields))
 PY
 )
   mkdir -p "$STATE_DIR"
-  printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$payload" >> "$STATE_DIR/ledger.tsv"
+  printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$payload" >> "$STATE_DIR/ledger.tsv" || return 1
   [[ ${E2E_LEDGER:-on} == off ]] && return 0
   key=$(security find-generic-password -s honeycomb-agent-traces -w 2>/dev/null) || return 0
   [[ -n "$key" ]] || return 0
-  curl -s -m 5 -X POST "https://api.eu1.honeycomb.io/1/events/workflow-ledger" \
-    -H "X-Honeycomb-Team: $key" -H "Content-Type: application/json" -d "$payload" >/dev/null 2>&1 || true
+  curl --fail -s -m 5 -X POST "https://api.eu1.honeycomb.io/1/events/workflow-ledger" \
+    -H "X-Honeycomb-Team: $key" -H "Content-Type: application/json" -d "$payload" >/dev/null 2>&1
 }
