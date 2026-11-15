@@ -107,6 +107,12 @@ class AdvisoryTests(Fixture):
         self.tool("bundle", {"files": []}, code=2)
         self.assertEqual(2, self.scan()[0])
 
+    def test_bad_package_configuration_is_recorded_as_incomplete(self):
+        self.write("package.json", "not json")
+        code, report = self.scan()
+        self.assertEqual(2, code)
+        self.assertEqual("incomplete", report["tools"]["configuration"]["status"])
+
     def test_file_length_applies_to_edits_before_the_reported_excess(self):
         self.tool("pnpm", [{"filePath": str(self.repo / "sample.ts"), "messages": [
             {"ruleId": "max-lines", "severity": 1, "line": 3, "endLine": 3, "message": "Long file"}
