@@ -128,6 +128,21 @@ class AdvisoryTests(Fixture):
         items = [f for f in self.scan()[1]["findings"] if f["tool"] == "rubocop"]
         self.assertEqual(2, len({f["id"] for f in items}))
 
+    def test_same_rule_reports_on_one_line_keep_distinct_columns(self):
+        self.tool("pnpm", [{"filePath": str(self.repo / "sample.ts"), "messages": [
+            {"ruleId": "no-unused-vars", "severity": 1, "line": 2, "column": column, "endLine": 2, "message": "Unused variable"}
+            for column in [3, 12]
+        ]}])
+        items = [f for f in self.scan()[1]["findings"] if f["tool"] == "eslint"]
+        self.assertEqual(2, len(items))
+        self.assertEqual(2, len({f["id"] for f in items}))
+
+    def test_repeated_reports_preserve_occurrences_without_duplicate_decisions(self):
+        message = {"ruleId": "max-lines-per-function", "severity": 1, "line": 1, "column": 1, "endLine": 3, "message": "Long function"}
+        self.tool("pnpm", [{"filePath": str(self.repo / "sample.ts"), "messages": [message, message]}])
+        item = next(f for f in self.scan()[1]["findings"] if f["tool"] == "eslint")
+        self.assertEqual(2, item["occurrences"])
+
     def test_duplication_checks_both_sides_and_stays_advisory_above_threshold(self):
         self.write(".jscpd.json", "{}")
         payload = {"duplicates": [{"firstFile": {"name": "sample.rb", "start": 2, "end": 4},
