@@ -60,6 +60,23 @@ def decisions():
     return [json.loads(line) for line in DECISIONS.read_text().splitlines()] if DECISIONS.exists() else []
 
 
+def verify_fix(previous, item):
+    report = collect(previous["base"], previous["harness"], previous["workflow"], previous.get("task_id"), previous.get("session_id"), previous["files"])
+    added = lint.git("diff", "--no-ext-diff", "--no-color", previous["tree"], report["tree"])
+    if previous["policy"] != report["policy"] or re.search(r"^\+.*(?:rubocop:\s*(?:disable|todo)|eslint-disable|jscpd:ignore)", added, re.MULTILINE):
+        raise ValueError("Lint policy or suppressions changed; record a justified keep instead of a verified fix")
+    if lint.exit_status(report) or any(f["id"] == item["id"] for f in report["findings"]):
+        raise ValueError("Fresh scan did not verify the fix")
+    previous_ids = {f["id"] for f in previous["findings"]}
+    if any(f["affected"] and f["id"] not in previous_ids and
+           (f["tool"], f["rule"], f["path"]) == (item["tool"], item["rule"], item["path"])
+           for f in report["findings"]):
+        raise ValueError("A replacement finding remains in the affected file; no verified fix recorded")
+    if Path(item["path"]).exists() and report["tools"].get(item["tool"], {}).get("status") != "complete":
+        raise ValueError("The relevant tool did not complete the verification scan")
+    return report
+
+
 def decide(identifier, outcome, reason):
     if not reason.strip():
         raise ValueError("A review reason is required")
@@ -69,28 +86,16 @@ def decide(identifier, outcome, reason):
         raise ValueError("Finding is not in the current review scope")
     original_run = report["run_id"]
     if outcome == "fixed":
-        previous = report
-        report = collect(previous["base"], previous["harness"], previous["workflow"], previous.get("task_id"), previous.get("session_id"), previous["files"])
-        added = lint.git("diff", "--no-ext-diff", "--no-color", previous["tree"], report["tree"])
-        if previous["policy"] != report["policy"] or re.search(r"^\+.*(?:rubocop:\s*(?:disable|todo)|eslint-disable|jscpd:ignore)", added, re.MULTILINE):
-            raise ValueError("Lint policy or suppressions changed; record a justified keep instead of a verified fix")
-        if lint.exit_status(report) or any(f["id"] == identifier for f in report["findings"]):
-            raise ValueError("Fresh scan did not verify the fix")
-        previous_ids = {f["id"] for f in previous["findings"]}
-        if any(f["affected"] and f["id"] not in previous_ids and
-               (f["tool"], f["rule"], f["path"]) == (item["tool"], item["rule"], item["path"])
-               for f in report["findings"]):
-            raise ValueError("A replacement finding remains in the affected file; no verified fix recorded")
-        if Path(item["path"]).exists() and report["tools"].get(item["tool"], {}).get("status") != "complete":
-            raise ValueError("The relevant tool did not complete the verification scan")
+        report = verify_fix(report, item)
     elif report["tree"] != lint.fingerprint() or report["policy"] != lint.policy_hash():
         raise ValueError("Code or lint policy changed; scan again before reviewing")
-    key = hashlib.sha256(json.dumps([identifier, report["tree"], outcome]).encode()).hexdigest()[:24]
+    key = hashlib.sha256(json.dumps([identifier, report["tree"], report["collector"], outcome]).encode()).hexdigest()[:24]
     if any(d["review_id"] == key for d in decisions()):
         print("Decision already recorded")
         return
     decision = {"review_id": key, "finding_id": identifier, "outcome": outcome, "reason": reason,
-                "tree": report["tree"], "policy": report["policy"], "run_id": report["run_id"], "flagged_run_id": original_run}
+                "tree": report["tree"], "policy": report["policy"], "collector": report["collector"],
+                "run_id": report["run_id"], "flagged_run_id": original_run}
     with DECISIONS.open("a") as stream:
         stream.write(json.dumps(decision) + "\n")
     emit("quality_advisory_reviewed", report, review_id=key, finding_id=identifier, flagged_run_id=original_run,
@@ -106,7 +111,8 @@ def check():
     if lint.exit_status(report):
         emit("quality_advisory_gate", report, gate_status="incomplete" if lint.exit_status(report) == 2 else "blocking")
         raise ValueError("Lint errors or incomplete scans remain")
-    reviewed = {d["finding_id"] for d in decisions() if d["tree"] == report["tree"] and d["policy"] == report["policy"]}
+    reviewed = {d["finding_id"] for d in decisions() if d["tree"] == report["tree"] and d["policy"] == report["policy"]
+                and d.get("collector") == report["collector"]}
     missing = [f["id"] for f in report["findings"] if f["affected"] and f["id"] not in reviewed]
     emit("quality_advisory_gate", report, gate_status="unreviewed" if missing else "ready", unreviewed_count=len(missing))
     if missing:
