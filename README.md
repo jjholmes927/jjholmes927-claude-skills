@@ -168,9 +168,17 @@ MIT - See LICENSE file for details
 Every change under `skills/` needs a version bump in `plugin.json` and both version fields in `.claude-plugin/marketplace.json`, otherwise installed copies never pick it up. CI enforces this on `master` and a local pre-push hook catches it earlier:
 
 ```bash
-git config core.hooksPath .githooks
+bash scripts/setup-dev.sh
 ```
 
 `master` only accepts pull requests with the version and adapter compatibility checks green. CI imports each candidate into temporary Codex, Cursor and OpenCode installations and checks complete coverage, source parity and repeat imports.
+
+The required adapter check also runs bundled workflow behavior tests. Developer
+setup enables the version hook per checkout and preserves existing custom hooks.
+Configured lint diagnostics can be collected independently with
+`python3 -B skills/e2e/scripts/lint_advisories.py <base> --harness codex`.
+It writes local reports under `.e2e/`; successful scans with advisories exit 0,
+blocking findings exit 1 and incomplete scans exit 2. No lint rules are enabled
+or changed by the collector.
 
 Shared skill content belongs here. Dotfiles owns harness compatibility and installation, and installed caches are generated outputs. Test unpublished changes in temporary targets; after merging a release, run `workflow-sync` from dotfiles to update the marketplace plugin and every installed adapter. Start fresh sessions afterwards. A skill-only change needs no dotfiles commit.
