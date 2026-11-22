@@ -13,6 +13,8 @@ Claims about behaviour require evidence from a running system. Green tests, clea
 
 State in one or two lines the observable behaviour the change promises — what a skeptic who cannot read the code would need to see. If you catch yourself listing test names or file paths, start again. The promise is about the system, not the diff.
 
+Start from the approved acceptance criteria when they exist: the ones the caller passed, or else those in `.e2e/handoff.md` in this worktree, used only when its recorded task or branch matches the current one (a handoff left by an earlier task supplies the wrong criteria). Write one promise per criterion this PR is meant to deliver, including criteria the diff appears not to address (for a stacked slice, the criteria the plan assigns to that slice). Then add diff-derived promises only for behaviour the criteria don't cover. A promise derived only from the diff lets the change grade itself on what it built, and misses what it forgot to build.
+
 ## Step 2: Route by change type
 
 | Change | Evidence bar | How |
@@ -97,7 +99,7 @@ Rules: a 🔴 verdict writes nothing (ship's loud 🔴 path stays the only way p
 
 ## Arguments
 
-$ARGUMENTS — Optional: a hint of what changed (ticket, PR ref, or free text). Empty → derive the promises from the current diff and recent commits.
+$ARGUMENTS — Optional: approved acceptance criteria, or a hint of what changed (ticket, PR ref, or free text). Empty → use the acceptance criteria in `.e2e/handoff.md` when present, plus the current diff and recent commits.
 
 ## Checklist
 
