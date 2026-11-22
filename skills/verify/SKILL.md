@@ -113,14 +113,3 @@ Report each promise as in Step 5, except that anything not checked is 🟡 and �
 ## Arguments
 
 $ARGUMENTS — Optional: approved acceptance criteria, a hint of what changed (ticket, PR ref, or free text), or a production target (recipe, deployed SHA and criteria). Empty → use the acceptance criteria in `.e2e/handoff.md` when present, plus the current diff and recent commits.
-
-## Checklist
-
-- [ ] Promise written before any tool chosen
-- [ ] Evidence gathered per change type; UI routed through verify-ui
-- [ ] Writes read back through a different interface than the writer
-- [ ] Real trigger exercised at least once — no hand-called handlers standing in for wiring
-- [ ] Environment repaired (tools installed/updated, server started) rather than verification downgraded
-- [ ] Report shows evidence per promise, or declares 🟡/🔴 with reason and follow-up plan — never silence
-- [ ] ✅/🟡 verdict recorded in `.verify/<tree>.json` against the working-tree fingerprint (Step 6)
-- [ ] Production target: only production-observable promises, read-only data reads, error and health checks, report stamped with the deployed SHA
