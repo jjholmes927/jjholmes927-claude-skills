@@ -97,7 +97,7 @@ Ship Step 10 calls verify after a deploy with the repository's production check 
 - **Data:** read-only queries through the read-only path the recipe names, each query shown with its result. Never an app console, runner or SSH session: application code can send email, call APIs or enqueue jobs.
 - **Errors and health:** the recipe's error check (error types new since the deploy, each with its route or stack) and its liveness and health checks, responses shown.
 
-Statuses change meaning here: 🔴 is a promise that fails in production, and anything not checked is 🟡. Head the report `Production check @ <deployed SHA>`; the deployed SHA replaces Step 6's fingerprint. Ship Step 10's verdict rules decide the overall verdict, including when verify runs by hand.
+Report each promise as in Step 5, except that anything not checked is 🟡 and 🔴 means it failed in production. Ship Step 10's verdict rules and `Production check @ <deployed SHA>` stamp give the overall verdict, including when verify runs by hand; the deployed SHA replaces Step 6's fingerprint.
 
 ## Anti-patterns
 

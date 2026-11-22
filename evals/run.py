@@ -121,7 +121,10 @@ def prepare(case, directory, source_root):
         sources[relative] = hashlib.sha256(content).hexdigest()
     if case["kind"] == "gate":
         (workspace / "PLAN.md").write_text((FIXTURES / case["fixture"]).read_text())
-    elif case["kind"] not in ("decision", "promises", "verdict"):
+    elif case["kind"] == "verdict":
+        (workspace / "docs").mkdir()
+        (workspace / "docs/production-check.md").write_text((FIXTURES / "production-check.md").read_text())
+    elif case["kind"] not in ("decision", "promises"):
         comparison = "<" if case["defective"] else "<="
         (workspace / "REQUIREMENTS.md").write_text(REQUIREMENTS)
         (workspace / "pricing.py").write_text(
@@ -130,8 +133,7 @@ def prepare(case, directory, source_root):
             "        raise ValueError('weight must be positive')\n"
             f"    return 500 if weight_grams {comparison} 1000 else 750\n"
         )
-    fixtures = {path: (FIXTURES / name).read_text() for path, name in case.get("fixture_files", {}).items()}
-    for relative, text in {**fixtures, **case.get("files", {})}.items():
+    for relative, text in case.get("files", {}).items():
         path = workspace / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)

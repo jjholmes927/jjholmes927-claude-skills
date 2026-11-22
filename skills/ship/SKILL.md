@@ -357,7 +357,7 @@ The recipe owns every repository fact: production URL, deploy signal, login and 
 **1. Wait for the deploy.** A newer push to main can cancel the CI run for `$MERGE_SHA`, so watch every main commit that contains it. The loop assumes the recipe's signal is a commit status whose context it names (`$DEPLOY_CONTEXT`); poll any other signal with the same bounds and rules. One call stays under eight minutes; repeat it up to four times (about 30 minutes in all), or run it in the background where the harness supports that:
 
 ```bash
-for i in $(seq 1 24); do
+for i in $(seq 1 14); do
   git fetch -q origin "$PR_BASE_BRANCH"
   rows=$(for sha in $(git rev-list --ancestry-path "$MERGE_SHA..origin/$PR_BASE_BRANCH") "$MERGE_SHA"; do
     deploy=$(gh api "repos/{owner}/{repo}/commits/$sha/status" --jq "[.statuses[] | select(.context == \"$DEPLOY_CONTEXT\") | .state][0] // \"none\"")
@@ -366,7 +366,7 @@ for i in $(seq 1 24); do
   done)
   echo "$rows"
   echo "$rows" | grep -qE 'deploy=(success|failure|error)|=[a-z_]*failure' && break
-  sleep 20
+  sleep 30
 done
 ```
 
