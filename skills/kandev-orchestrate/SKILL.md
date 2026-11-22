@@ -44,7 +44,7 @@ The orchestrator owns:
 ### The Two Human Touchpoints
 Worker sessions run `/e2e <TICKET> --execution direct --review luna`. They require human interaction at two points:
 1. **Touchpoint 1 — Plan Approval**: The worker posts its implementation plan and waits for approval. The user approves or amends directly in the worker session. The orchestrator **never** auto-approves plans.
-2. **Touchpoint 2 — PR Review & Merge**: The worker verifies changes, runs Luna adversarial review, opens a PR (<500 lines), and moves the ticket to In Review. The user merges the PR, except in repositories whose guide opts into agent merges, where ship lands it on green (ship Step 9).
+2. **Touchpoint 2 — PR Review & Merge**: The worker verifies changes, runs Luna adversarial review, opens a PR (<500 lines), and moves the ticket to In Review. The user merges the PR, except in repositories whose guide opts into agent merges, where ship lands it on green (ship Step 9) and, where the guide also opts in, checks production after the deploy, opening a revert PR for the user if the check fails (ship Step 10).
 
 Kandev considers a task complete when its session finishes cleanly and PR automation requirements are satisfied, unblocking downstream tasks.
 

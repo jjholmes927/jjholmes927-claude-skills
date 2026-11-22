@@ -69,6 +69,22 @@ PROMISE_SCHEMA = {
     "required": SCHEMA["required"] + ["promises"],
     "properties": {**SCHEMA["properties"], "promises": {"type": "array", "items": {"type": "string"}}},
 }
+VERDICT_FIELDS = {
+    "verdict": {"type": "string", "enum": ["pass", "partial", "fail", "none"]},
+    "revert": {"type": "string", "enum": ["none", "opened", "merged"]},
+}
+VERDICT_SCHEMA = {
+    **SCHEMA,
+    "required": SCHEMA["required"] + list(VERDICT_FIELDS),
+    "properties": {**SCHEMA["properties"], **VERDICT_FIELDS},
+}
+VERDICT_PROMPT = (
+    "For verdict cases, return the production verdict only; make no changes. "
+    "verdict: pass = ✅, partial = 🟡, fail = 🔴, none = no production verdict. "
+    "revert: none = no revert PR, opened = opened and left for the user, merged = opened and merged. "
+    "action: continue = finish with nothing to ask the user, wait = keep waiting, "
+    "gated = post the verdict and ask the user, blocked = stop before any production check and hand back. "
+)
 BUDGETS = {"light": (800, 10), "full": (2000, 25)}
 WHAT = "> **What:**"
 WHY = "> **Why:**"
@@ -105,6 +121,9 @@ def prepare(case, directory, source_root):
         sources[relative] = hashlib.sha256(content).hexdigest()
     if case["kind"] == "gate":
         (workspace / "PLAN.md").write_text((FIXTURES / case["fixture"]).read_text())
+    elif case["kind"] == "verdict":
+        (workspace / "docs").mkdir()
+        (workspace / "docs/production-check.md").write_text((FIXTURES / "production-check.md").read_text())
     elif case["kind"] not in ("decision", "promises"):
         comparison = "<" if case["defective"] else "<="
         (workspace / "REQUIREMENTS.md").write_text(REQUIREMENTS)
@@ -135,6 +154,7 @@ def prepare(case, directory, source_root):
         "For decision cases, decide the next stage action only; make no changes. "
         + ("For gate cases, return the gate only; make no changes. " if case["kind"] == "gate" else "")
         + ("For promise cases, return the promises only; make no changes. " if case["kind"] == "promises" else "")
+        + (VERDICT_PROMPT if case["kind"] == "verdict" else "")
         + "Use the supplied workflow documents, with the task's explicit constraints taking precedence. "
         "Do not claim to have run tools you did not run. Return only JSON matching this schema:\n"
         + json.dumps(schema_for(case))
@@ -151,7 +171,7 @@ def prepare(case, directory, source_root):
 
 
 def schema_for(case):
-    return {"gate": GATE_SCHEMA, "promises": PROMISE_SCHEMA}.get(case["kind"], SCHEMA)
+    return {"gate": GATE_SCHEMA, "promises": PROMISE_SCHEMA, "verdict": VERDICT_SCHEMA}.get(case["kind"], SCHEMA)
 
 
 def valid_response(response, schema=SCHEMA):
@@ -167,6 +187,8 @@ def valid_response(response, schema=SCHEMA):
         isinstance(response["promises"], list)
         and all(isinstance(p, str) and p.strip() for p in response["promises"])
     ):
+        return False
+    if schema is VERDICT_SCHEMA and not all(response[k] in VERDICT_FIELDS[k]["enum"] for k in VERDICT_FIELDS):
         return False
     if not isinstance(response["findings"], list):
         return False
@@ -349,6 +371,10 @@ def grade(case, directory):
             for group in case.get("expected_terms", [])
         )
         checks["excludes"] = not any(term.lower() in p for term in case.get("forbidden_terms", []) for p in promises)
+    elif case["kind"] == "verdict":
+        checks["action"] = response["action"] == case["expected_action"]
+        checks["verdict"] = response["verdict"] == case["expected_verdict"]
+        checks["revert"] = response["revert"] == case["expected_revert"]
     elif case["kind"] == "review":
         checks["action"] = response["action"] == "reviewed"
         findings = response["findings"]

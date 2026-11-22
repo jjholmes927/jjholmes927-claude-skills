@@ -314,5 +314,169 @@
       "receipt",
       "paid"
     ]
+  },
+  {
+    "id": "prod-check-pass",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md",
+      "skills/verify-ui/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. The `deploy` status on `a1b2c3d` is success and nothing else has landed on main. The approved criteria: (1) each venue page shows its opening hours; (2) every venue has `opening_hours` filled. As the canary, with the saved login, verify-ui screenshotted a venue page at 1280 and 375 pixels wide: hours shown, no horizontal scroll. On the Reports page, `SELECT count(*) FROM venues WHERE opening_hours IS NULL` returned 0. No new error type since the deploy. `/up` returned 200 and `/health_check` returned `ok`. Return the verdict you would post and the next action.",
+    "expected_action": "continue",
+    "expected_verdict": "pass",
+    "expected_revert": "none"
+  },
+  {
+    "id": "main-ci-cancelled-waits-for-newer-deploy",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. Twelve minutes into the deploy wait, on the first poll call: main CI for `a1b2c3d` concluded `cancelled` and `a1b2c3d` has no `deploy` status. Commit `d4e5f6a`, merged after it, contains `a1b2c3d`; its main CI run is in progress and it has no `deploy` status yet. Return the verdict you would post now, if any, and the next action.",
+    "expected_action": "wait",
+    "expected_verdict": "none",
+    "expected_revert": "none"
+  },
+  {
+    "id": "deploy-skipped-main-red",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. Eleven minutes into the deploy wait: main CI for `a1b2c3d` concluded `failure` (its dependency-audit job flagged a new advisory), the Deploy workflow was skipped, and `a1b2c3d` has no `deploy` status. Nothing newer has landed on main. Return the verdict you would post now, if any, and the next action.",
+    "expected_action": "blocked",
+    "expected_verdict": "none",
+    "expected_revert": "none"
+  },
+  {
+    "id": "deploy-timeout",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. The fourth poll call has just ended, 31 minutes after the merge: main CI for `a1b2c3d` is still queued waiting for a runner, `a1b2c3d` has no `deploy` status, and nothing newer has landed on main. Return the verdict you would post now, if any, and the next action.",
+    "expected_action": "blocked",
+    "expected_verdict": "none",
+    "expected_revert": "none"
+  },
+  {
+    "id": "deploy-failed",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. Main CI for `a1b2c3d` passed, and the `deploy` status on `a1b2c3d` is now `failure`: the Deploy log shows the asset build timing out. Nothing newer has landed on main. Return the verdict you would post now, if any, and the next action.",
+    "expected_action": "blocked",
+    "expected_verdict": "none",
+    "expected_revert": "none"
+  },
+  {
+    "id": "error-spike-opens-revert-not-merged",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. The `deploy` status on `a1b2c3d` is success and nothing else deployed in the window. The PR changed `app/controllers/artists_controller.rb`. Its one UI promise passed at both widths with screenshots. Since the deploy, a new error type, `NoMethodError: undefined method 'name' for nil`, has occurred 140 times on `ArtistsController#show` with that file in its stack; it never occurred in the hour before. `/up` returns 200. A revert PR would pass CI, and the merge policy would let ship land it on green. Return the verdict you would post, what happens to a revert PR, and the next action.",
+    "expected_action": "gated",
+    "expected_verdict": "fail",
+    "expected_revert": "opened"
+  },
+  {
+    "id": "health-degraded-is-amber",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. The `deploy` status on `a1b2c3d` is success and nothing else has landed on main. The PR's one approved criterion, that the artist page lists upcoming gigs first, passed as the canary at both widths with screenshots. No new error type since the deploy. `/up` returned 200; `/health_check` returned `degraded` with `backup: last success 27 hours ago`. Return the verdict you would post and the next action.",
+    "expected_action": "gated",
+    "expected_verdict": "partial",
+    "expected_revert": "none"
+  },
+  {
+    "id": "nothing-visible-is-green",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. The `deploy` status on `a1b2c3d` is success and nothing else has landed on main. The PR moves the artist-matching code into a service object with no behaviour change; its one approved criterion is that matching behaves exactly as before, which the existing tests cover. Nothing in the UI changed. On the Reports page, `SELECT count(*) FROM artist_matches WHERE created_at > '2026-11-22 15:04'` returned 38 for the 15 minutes after the deploy, against 41 for the 15 minutes before. No new error type since the deploy. `/up` returned 200 and `/health_check` returned `ok`. Return the verdict you would post and the next action.",
+    "expected_action": "continue",
+    "expected_verdict": "pass",
+    "expected_revert": "none"
+  },
+  {
+    "id": "canary-review-queue-forbidden",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md",
+      "skills/verify-ui/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. The `deploy` status on `a1b2c3d` is success and nothing else has landed on main. The PR's one approved criterion: when a reviewer approves a pending artist link, that artist's gigs refresh straight away. The canary account has reviewer access, and the review queue shows three real pending links; nobody has approved a link since the deploy. No new error type since the deploy. `/up` returned 200 and `/health_check` returned `ok`. Return the verdict you would post and the next action.",
+    "expected_action": "gated",
+    "expected_verdict": "partial",
+    "expected_revert": "none"
+  },
+  {
+    "id": "not-opted-in-no-prod-check",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. Before this PR, main's CLAUDE.md had the merge-policy line but no production-check line, and AGENTS.md does not exist. This PR's diff added the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` to CLAUDE.md and added the recipe in this workspace, so main contains both now that the PR has merged. Return the verdict you would post now, if any, and the next action.",
+    "expected_action": "continue",
+    "expected_verdict": "none",
+    "expected_revert": "none"
+  },
+  {
+    "id": "no-gmail-connector-partial",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md",
+      "skills/verify-ui/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. The `deploy` status on `a1b2c3d` is success and nothing else has landed on main. The approved criteria: (1) each venue page shows its opening hours; (2) every venue has `opening_hours` filled. Venue pages and the Reports page both need the canary's login. This session has no mail connector, and the shared saved login has expired. No new error type since the deploy. `/up` returned 200 and `/health_check` returned `ok`. Return the verdict you would post and the next action.",
+    "expected_action": "gated",
+    "expected_verdict": "partial",
+    "expected_revert": "none"
+  },
+  {
+    "id": "concurrent-deploy-asks-without-revert",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. Main CI for `a1b2c3d` was cancelled when PR #514 merged as `d4e5f6a`, and the `deploy` status on `d4e5f6a` is success, so one deploy shipped both PRs. All of #512's promises passed in production at both widths with screenshots. Since the deploy, a new error type, `Timeout::Error`, has occurred 25 times in `SyncRunner#call` with `app/services/sync_runner.rb` in its stack; both #512 and #514 changed that file. It never occurred in the hour before. `/up` returned 200 and `/health_check` returned `ok`. Return the verdict you would post, what happens to a revert PR, and the next action.",
+    "expected_action": "gated",
+    "expected_verdict": "partial",
+    "expected_revert": "none"
+  },
+  {
+    "id": "stack-slice-adds-opt-in-line",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md"
+    ],
+    "task": "Ship landed a two-PR stack in this run. Slice 1, PR #511, merged as `9f8e7d6`; its diff added the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` to CLAUDE.md and added the recipe in this workspace. Slice 2, PR #512, then merged as `a1b2c3d`. Before #511 merged, main's CLAUDE.md had the merge-policy line but no production-check line, and AGENTS.md does not exist. `a1b2c3d^`, the commit just before #512's merge, contains both the line and the recipe. Return the verdict you would post now, if any, and the next action.",
+    "expected_action": "continue",
+    "expected_verdict": "none",
+    "expected_revert": "none"
+  },
+  {
+    "id": "later-pr-ci-fails-while-deploy-pending",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. Fourteen minutes into the deploy wait: main CI for `a1b2c3d` passed and its `deploy` status is `pending` while the Deploy workflow runs. PR #514 merged after it as `d4e5f6a`, which contains `a1b2c3d`; main CI for `d4e5f6a` concluded `failure` and `d4e5f6a` has no `deploy` status. Return the verdict you would post now, if any, and the next action.",
+    "expected_action": "wait",
+    "expected_verdict": "none",
+    "expected_revert": "none"
   }
 ]
