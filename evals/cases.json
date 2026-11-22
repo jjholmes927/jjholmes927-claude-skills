@@ -456,5 +456,27 @@
     "expected_action": "gated",
     "expected_verdict": "partial",
     "expected_revert": "none"
+  },
+  {
+    "id": "stack-slice-adds-opt-in-line",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md"
+    ],
+    "task": "Ship landed a two-PR stack in this run. Slice 1, PR #511, merged as `9f8e7d6`; its diff added the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` to CLAUDE.md and added the recipe in this workspace. Slice 2, PR #512, then merged as `a1b2c3d`. Before #511 merged, main's CLAUDE.md had the merge-policy line but no production-check line, and AGENTS.md does not exist. `a1b2c3d^`, the commit just before #512's merge, contains both the line and the recipe. Return the verdict you would post now, if any, and the next action.",
+    "expected_action": "continue",
+    "expected_verdict": "none",
+    "expected_revert": "none"
+  },
+  {
+    "id": "later-pr-ci-fails-while-deploy-pending",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. Fourteen minutes into the deploy wait: main CI for `a1b2c3d` passed and its `deploy` status is `pending` while the Deploy workflow runs. PR #514 merged after it as `d4e5f6a`, which contains `a1b2c3d`; main CI for `d4e5f6a` concluded `failure` and `d4e5f6a` has no `deploy` status. Return the verdict you would post now, if any, and the next action.",
+    "expected_action": "wait",
+    "expected_verdict": "none",
+    "expected_revert": "none"
   }
 ]

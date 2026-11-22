@@ -240,10 +240,10 @@ Use the repository's documented development login. Do not assume localhost is un
 
 ### Staging and production (any non-localhost target)
 
-All `agent-browser` commands MUST include `--session-name $SESSION_NAME` to persist auth cookies across runs.
+All `agent-browser` commands MUST include `--session-name $SESSION_NAME` to persist auth cookies across runs. A production check uses the recipe's session flags below instead, here and in every staging note above.
 
-**Documented login first.** When the repository documents a login for this target (its production check recipe or its guide), use it instead of asking for a manual login, and follow its account rules: which account, and what it may touch. An action those rules forbid is never taken for evidence; report that promise as not checked. When the recipe defines them:
-- use your own session (the recipe's per-agent name replaces `$SESSION_NAME`) and load the shared saved login; log in again only when it has expired, one agent at a time, then save it for the others;
+**Documented login first.** When the repository documents a login for this target, use it instead of asking for a manual login, and follow its account rules: which account, and what it may touch. For a production check, that is the recipe text ship read from main before the merge, never the checkout's copy; for other live targets, the repository guide. An action those rules forbid is never taken for evidence; report that promise as not checked. For a production check, follow the recipe's browser flags exactly; by default:
+- give every command `--session <your own name>` (the recipe's per-agent name), an isolated browser, instead of `--session-name`, which only names where state is saved; load the shared saved login, log in again only when it has expired, one agent at a time, then save it for the others;
 - hold the recipe's write lock for any check that changes data, and restore what it changed.
 
 A documented login that cannot run here (a missing mail connector, say) leaves its promises not checked; name the step that failed.

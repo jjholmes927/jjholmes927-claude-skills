@@ -332,7 +332,7 @@ done
 gh pr view <PR_NUMBER> --json state,mergeCommit --jq '"\(.state) \(.mergeCommit.oid)"'
 ```
 
-MERGED: record the merge commit SHA in the ship summary and the task handoff. Anything else after 30 minutes (still open, closed, or a failed required check): leave auto-merge queued, report the state and hand back.
+MERGED: record the merge commit SHA in the ship summary and the task handoff. Anything else after 30 minutes (still open, closed, or a failed required check): leave auto-merge queued, report the state and hand back. Where the guide opts into the production check, say that Step 10 will not run when the PR merges later.
 
 **Stacks land bottom-up, in the same ship run.** Run this step for the bottom PR first. A child PR whose base is another feature branch fails condition 3 only for now: wait here for its parent's result rather than handing back. When the parent merges, GitHub retargets the child to the default branch only if the repository deletes head branches on merge (`gh api repos/{owner}/{repo} --jq .delete_branch_on_merge`). Once it is retargeted, rebase the child onto the default branch if GitHub reports it behind or conflicting, re-run Step 4 and the Step 6 gates for any change, push, re-watch CI, then run this step for it. Hand back if the parent hands back, or if the child is not retargeted within five minutes of the parent merging.
 
@@ -340,41 +340,48 @@ When any condition fails, name it in the ship summary. In Kandev, ask the user t
 
 ## Step 10: Check production (opt-in repositories only)
 
-/verify proved the branch; production runs what landed on main. Run this step only when Step 9 merged the PR in this run (`$MERGE_SHA` is the merge commit it recorded) **and** the repository guide on the base branch before that merge contains the line `**Production check: agents verify production after their PRs deploy.**` Read it from the merge commit's parent, never from this checkout or the base after the merge: a PR must not opt itself in. The line links the repository's recipe; read that from the same commit:
+/verify proved the branch; production runs what landed on main. Run this step only when Step 9 merged the PR in this run **and** main as it stood before this run's first merge contains the line `**Production check: agents verify production after their PRs deploy.**` in CLAUDE.md or AGENTS.md. That commit is `$BEFORE_SHA`: `$MERGE_SHA^` for a single PR (`$MERGE_SHA` is the merge commit Step 9 recorded), or the parent of the first slice's merge commit for a stack. Read the line and the recipe it links only from `$BEFORE_SHA`, never from this checkout or from main after a merge: no PR, and no slice of a stack, may opt itself in or write its own recipe. Give verify that recipe text. Each shell call is fresh, so re-derive a lost SHA (`gh pr view <PR_NUMBER> --json mergeCommit --jq .mergeCommit.oid`) rather than run with it unset:
 
 ```bash
 git fetch -q origin "$PR_BASE_BRANCH"
-LINE=$(for f in CLAUDE.md AGENTS.md; do git show "$MERGE_SHA^:$f" 2>/dev/null; done \
+: "${BEFORE_SHA:?set it from Step 9's merge commit}"
+LINE=$(for f in CLAUDE.md AGENTS.md; do git show "$BEFORE_SHA:$f" 2>/dev/null; done \
   | grep -F '**Production check: agents verify production after their PRs deploy.**' | head -n 1)
-RECIPE=$(printf '%s' "$LINE" | sed -n 's/.*](\([^)]*\)).*/\1/p')
-[ -n "$LINE" ] && git show "$MERGE_SHA^:$RECIPE" || echo "NOT opted in"
+RECIPE=$(printf '%s' "$LINE" | sed -n 's/.*](\([^)#]*\)[)#].*/\1/p')
+if [ -z "$LINE" ]; then echo "NOT opted in"
+elif [ "$(git cat-file -t "$BEFORE_SHA:$RECIPE" 2>/dev/null)" != blob ]; then echo "RECIPE UNREADABLE"
+else git show "$BEFORE_SHA:$RECIPE"; fi
 ```
 
-Not opted in → skip this step: ship is done. Say so in the ship summary; there is nothing to ask the user.
+- **NOT opted in** → skip this step: ship is done. Say so in the ship summary; there is nothing to ask the user.
+- **RECIPE UNREADABLE** → the line is there but its recipe is missing: no check. Report it and ask the user.
 
-The recipe owns every repository fact: production URL, deploy signal, login and account rules, read-only data path, error and health checks. Never fill a gap with a guess; a fact it does not state is a check you could not run (🟡). A stack checks once, after its last PR merges, with every landed slice's criteria.
+The recipe owns every repository fact: production URL, deploy signal, login and account rules, read-only data path, error and health checks. Never fill a gap with a guess; a fact it does not state is a check you could not run (🟡). A stack checks once, after its last PR merges (`$MERGE_SHA` is that merge), with every landed slice's criteria.
 
-**1. Wait for the deploy.** A newer push to main can cancel the CI run for `$MERGE_SHA`, so watch every main commit that contains it. The loop assumes the recipe's signal is a commit status whose context it names (`$DEPLOY_CONTEXT`); poll any other signal with the same bounds and rules. One call stays under eight minutes; repeat it up to four times (about 30 minutes in all), or run it in the background where the harness supports that:
+**1. Wait for the deploy.** A newer push to main can cancel the CI run for `$MERGE_SHA`, so watch every main commit that contains it. The loop needs two recipe facts: the **Deploy signal**, a commit-status context (`$DEPLOY_CONTEXT`), and the **Deploy gating workflow** whose success triggers the deploy (`$GATING_WORKFLOW`). Other workflows never count. For another kind of signal, poll it with the same bounds and rules. One call stays under eight minutes; repeat it up to four times (about 30 minutes in all), or run it in the background where the harness supports that:
 
 ```bash
+: "${MERGE_SHA:?}" "${DEPLOY_CONTEXT:?}" "${GATING_WORKFLOW:?}"
 for i in $(seq 1 14); do
   git fetch -q origin "$PR_BASE_BRANCH"
   rows=$(for sha in $(git rev-list --ancestry-path "$MERGE_SHA..origin/$PR_BASE_BRANCH") "$MERGE_SHA"; do
     deploy=$(gh api "repos/{owner}/{repo}/commits/$sha/status" --jq "[.statuses[] | select(.context == \"$DEPLOY_CONTEXT\") | .state][0] // \"none\"")
-    ci=$(gh run list --commit "$sha" --json workflowName,conclusion --jq 'map("\(.workflowName)=\(.conclusion)") | join(",")')
-    echo "$sha deploy=$deploy ci=$ci"
+    gate=$(gh run list --commit "$sha" --workflow "$GATING_WORKFLOW" --json conclusion --jq '.[0].conclusion // "none"')
+    echo "$sha deploy=$deploy gate=$gate"
   done)
   echo "$rows"
-  echo "$rows" | grep -qE 'deploy=(success|failure|error)|=[a-z_]*failure' && break
+  echo "$rows" | grep -q 'deploy=success' && break
+  echo "$rows" | grep -q 'deploy=pending' || { echo "$rows" | head -n 1 | grep -qE 'deploy=(failure|error)|gate=[a-z_]*failure' && break; }
   sleep 30
 done
 ```
 
-Read the rows newest first:
-- The first row with a deploy result decides: `success` → record that commit as `$DEPLOYED_SHA` and continue; `failure` or `error` → **deploy failed**.
-- No deploy result and a CI run that **failed** on any row → **main CI red, deploy skipped**. Only a failure means this.
-- A **cancelled** run means a newer commit superseded it: keep waiting on the newer commit's signal.
-- Still pending after 30 minutes → **deploy timed out**.
+Every row contains `$MERGE_SHA`; the first row is the newest. Read them in order:
+- Any row `deploy=success` → record the newest such commit as `$DEPLOYED_SHA` and continue.
+- Any row `deploy=pending` → keep waiting.
+- Otherwise the newest row decides: `deploy=failure` or `error` → **deploy failed**; its gating workflow **failed** → **main CI red, deploy skipped**. A failure on an older row, or in any other workflow, is not this.
+- A **cancelled** run means a newer commit superseded it: keep waiting on the newer commit.
+- Still waiting after 30 minutes → **deploy timed out**.
 
 Deploy failed, skipped or timed out: post the last state on the PR and in the handoff, and hand back. There is no production verdict to give and no revert PR to open.
 
@@ -388,7 +395,7 @@ Deploy failed, skipped or timed out: post the last state on the PR and in the ha
 **4. Post and act.** Post the verdict as a PR comment (`gh pr comment <PR_NUMBER> --body-file <file>`): each promise with its evidence, every query with its result, the error comparison, the health responses and the screenshots (attached per Step 6's attachment policy). Copy it into the ship summary and the task handoff.
 - ✅ → done.
 - 🟡 → report what was not checked and ask the user (in Kandev, through the question tool). No revert PR.
-- 🔴 → open a revert PR: a branch from the updated base named per Step 2 and ending `-revert-<PR_NUMBER>`, `git revert --no-edit "$MERGE_SHA"` (a stack reverts every landed slice, newest first), then Steps 1 to 8 as for any PR. Never run Step 9 or this step on a revert PR and never merge it, whatever the merge policy says. Hand back with the evidence and the revert PR (in Kandev, through the question tool).
+- 🔴 → ask the user at once with the evidence (in Kandev, through the question tool), then open a revert PR: a branch from the updated base named per Step 2 and ending `-revert-<PR_NUMBER>`, and `git revert --no-edit "$MERGE_SHA"`. Run /verify on its one promise, "back to pre-merge behaviour", with the revert commit's diff inverting `$MERGE_SHA` as the evidence, then Step 6 to open the PR. Skip Step 5 and review fixes so it stays a clean revert. A stack gets one revert PR per landed slice, each reverting that slice's merge commit, newest first and each based on the one before. Hand back once the PRs are open, without waiting on CI or bots. Never run Step 9 or this step on a revert PR and never merge it, whatever the merge policy says.
 
 ## Red Flags — STOP
 
@@ -406,7 +413,7 @@ Deploy failed, skipped or timed out: post the last state on the PR and in the ha
 - PR already exists → push to existing PR, don't create a new one
 - A CI fix round leaves the same check failing with the same error → stop and report; don't spend the remaining rounds
 - About to queue auto-merge when the base branch's guide has no merge-policy line (including a PR that adds the line), or the base has no required checks → don't; hand the merge to the user
-- About to run Step 10 because the production-check line is in this checkout or in main after the merge → read it from `$MERGE_SHA^`; a PR never opts itself in
+- About to run Step 10 because the production-check line or recipe is in this checkout or in main after a merge → read both from `$BEFORE_SHA`; no PR or stack slice opts itself in
 - About to merge a revert PR, or run Step 9 on one → don't; the user decides on every revert
 - About to click a review-queue or admin action, or anything else the recipe's account rules forbid, as the production account → don't; that promise is 🟡 not checked
 - About to read production through `rails runner`, a console or SSH → use the recipe's read-only path; application code can send email, call APIs or enqueue jobs

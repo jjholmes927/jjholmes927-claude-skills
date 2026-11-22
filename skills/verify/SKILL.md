@@ -90,7 +90,7 @@ Rules: a 🔴 verdict writes nothing (ship's loud 🔴 path stays the only way p
 
 ## Production target
 
-Ship Step 10 calls verify after a deploy with the repository's production check recipe, the deployed SHA and the approved acceptance criteria. The recipe supplies every production fact; never substitute one it does not state.
+Ship Step 10 calls verify after a deploy with the production check recipe as ship read it from main before the merge, the deployed SHA and the approved acceptance criteria. That text supplies every production fact; never substitute one it does not state, and never read the recipe from the checkout.
 
 - **Promises:** write them as in Step 1, then keep only those observable in production: UI, data and errors. Mark the rest "covered pre-merge" (internal structure and behaviour the pre-merge verdict already proved). An observable promise this session cannot check (a missing tool or login, or an action the recipe's account rules forbid) is 🟡 naming the blocker. Never take a forbidden action to get evidence.
 - **UI:** through verify-ui at the recipe's URL with its documented login and account rules, at desktop and phone width, with screenshots.
