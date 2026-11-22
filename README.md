@@ -117,11 +117,11 @@ Contributions welcome! To add a new skill:
 
 ## Workflow evaluations
 
-`evals/` contains fourteen cases: nine stage decisions using snapshots of the
-current workflow documents, two `/e2e` plan gates, paired defective/correct code
-reviews, and a small implementation checked by independent behavioural
-assertions. Python 3 and Git are the only dependencies for preparation and
-grading. Gate cases hand the agent a plan fixture from `evals/fixtures/` and grade
+`evals/cases.json` holds 52 cases: stage decisions and production verdicts
+graded on exact answers, promise lists, two `/e2e` plan gates, paired
+defective/correct code reviews, and a small implementation checked by
+independent behavioural assertions. Python 3 and Git are the only dependencies
+for preparation and grading. Gate cases hand the agent a plan fixture from `evals/fixtures/` and grade
 its brief on tier, effects, line and character budget, order, the What/Why
 lines, decision limits and the checklist skim layer.
 
@@ -152,6 +152,24 @@ and save the final JSON as the adjacent `response.json`. Then use
 `grade --output /absolute/new-directory`. The preparation and grading protocol
 does not depend on Codex; automatic launch currently supports Codex only.
 Keep graders and expected answers outside the agent's workspace.
+
+### On Claude
+
+`evals/plugin_eval.py` runs the decision and verdict cases on Claude through
+`claude plugin eval`, which loads this plugin, runs each case three times and
+also runs it without the plugin, so the report shows what the skills change.
+The case tells the model which skills to load; verdict cases get their recipe
+fixture from a generated scaffold script. Generated cases go to the git-ignored
+`evals/claude/`, results to `evals/results/`.
+
+```bash
+python3 -B evals/plugin_eval.py run --model claude-opus-5-5 --concurrency 4
+python3 -B evals/plugin_eval.py run --model claude-opus-5-5 --case prod-check-pass --runs 1 --no-publish
+```
+
+Runs use your Claude login and count against its usage; the report shows the
+API-equivalent cost. Plan gates, promises, reviews and the implementation case
+have Python graders, so they still run only through `run.py`.
 
 Decision cases assess instruction interpretation, not tool enforcement. Code
 cases check actual file changes and outcomes. Review explanations still need
