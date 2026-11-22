@@ -233,6 +233,8 @@ Close the browser session. Skipping this leaves zombie browser processes.
 agent-browser close
 ```
 
+A production check closes its own browser with `agent-browser --session <name> close`; a bare `close` shuts the default browser and leaves yours running.
+
 ## Authentication
 
 ### Localhost

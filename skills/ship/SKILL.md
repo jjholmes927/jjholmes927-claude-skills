@@ -361,7 +361,7 @@ The recipe owns every repository fact: production URL, deploy signal, login and 
 **1. Wait for the deploy.** A newer push to main can cancel the CI run for `$MERGE_SHA`, so watch every main commit that contains it. The loop needs two recipe facts: the **Deploy signal**, a commit-status context (`$DEPLOY_CONTEXT`), and the **Deploy gating workflow** whose success triggers the deploy (`$GATING_WORKFLOW`). Other workflows never count. For another kind of signal, poll it with the same bounds and rules. One call stays under eight minutes; repeat it up to four times (about 30 minutes in all), or run it in the background where the harness supports that:
 
 ```bash
-: "${MERGE_SHA:?}" "${DEPLOY_CONTEXT:?}" "${GATING_WORKFLOW:?}"
+: "${MERGE_SHA:?}" "${PR_BASE_BRANCH:?}" "${DEPLOY_CONTEXT:?}" "${GATING_WORKFLOW:?}"
 for i in $(seq 1 14); do
   git fetch -q origin "$PR_BASE_BRANCH"
   rows=$(for sha in $(git rev-list --ancestry-path "$MERGE_SHA..origin/$PR_BASE_BRANCH") "$MERGE_SHA"; do
@@ -371,14 +371,14 @@ for i in $(seq 1 14); do
   done)
   echo "$rows"
   echo "$rows" | grep -q 'deploy=success' && break
-  echo "$rows" | grep -q 'deploy=pending' || { echo "$rows" | head -n 1 | grep -qE 'deploy=(failure|error)|gate=[a-z_]*failure' && break; }
+  echo "$rows" | grep -qE 'deploy=pending|deploy=none gate=success' || { echo "$rows" | head -n 1 | grep -qE 'deploy=(failure|error)|gate=[a-z_]*failure' && break; }
   sleep 30
 done
 ```
 
 Every row contains `$MERGE_SHA`; the first row is the newest. Read them in order:
 - Any row `deploy=success` → record the newest such commit as `$DEPLOYED_SHA` and continue.
-- Any row `deploy=pending` → keep waiting.
+- Any row `deploy=pending`, or a passed gating workflow with no deploy status yet (the deploy job sets it only once it starts) → keep waiting.
 - Otherwise the newest row decides: `deploy=failure` or `error` → **deploy failed**; its gating workflow **failed** → **main CI red, deploy skipped**. A failure on an older row, or in any other workflow, is not this.
 - A **cancelled** run means a newer commit superseded it: keep waiting on the newer commit.
 - Still waiting after 30 minutes → **deploy timed out**.
@@ -395,7 +395,7 @@ Deploy failed, skipped or timed out: post the last state on the PR and in the ha
 **4. Post and act.** Post the verdict as a PR comment (`gh pr comment <PR_NUMBER> --body-file <file>`): each promise with its evidence, every query with its result, the error comparison, the health responses and the screenshots (attached per Step 6's attachment policy). Copy it into the ship summary and the task handoff.
 - ✅ → done.
 - 🟡 → report what was not checked and ask the user (in Kandev, through the question tool). No revert PR.
-- 🔴 → ask the user at once with the evidence (in Kandev, through the question tool), then open a revert PR: a branch from the updated base named per Step 2 and ending `-revert-<PR_NUMBER>`, and `git revert --no-edit "$MERGE_SHA"`. Run /verify on its one promise, "back to pre-merge behaviour", with the revert commit's diff inverting `$MERGE_SHA` as the evidence, then Step 6 to open the PR. Skip Step 5 and review fixes so it stays a clean revert. A stack gets one revert PR per landed slice, each reverting that slice's merge commit, newest first and each based on the one before. Hand back once the PRs are open, without waiting on CI or bots. Never run Step 9 or this step on a revert PR and never merge it, whatever the merge policy says.
+- 🔴 → don't ask yet: the comment above reports it, so add it to the handoff and any ticket comment and go straight on. Open a revert PR: a branch from the updated base named per Step 2 and ending `-revert-<PR_NUMBER>`, and `git revert --no-edit "$MERGE_SHA"`. If the revert conflicts, `git revert --abort` and hand back with the conflict; never resolve it. Run /verify on its one promise, "back to pre-merge behaviour", with the revert commit's diff inverting `$MERGE_SHA` as the evidence, then Step 6 to open the PR. Skip Step 5 and review fixes so it stays a clean revert. A stack gets one revert PR per landed slice, each reverting that slice's merge commit, newest first and each based on the one before. Then ask the user once with the evidence and the revert PR links (in Kandev, through the question tool) and hand back, without waiting on CI or bots. Never run Step 9 or this step on a revert PR and never merge it, whatever the merge policy says.
 
 ## Red Flags — STOP
 
