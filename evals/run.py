@@ -130,8 +130,10 @@ def prepare(case, directory, source_root):
         (workspace / "PLAN.md").write_text((FIXTURES / case["fixture"]).read_text())
     elif case["kind"] == "verdict":
         (workspace / "docs").mkdir()
-        recipe = FIXTURES / case.get("recipe", "production-check.md")
-        (workspace / "docs/production-check.md").write_text(recipe.read_text())
+        lines = (FIXTURES / "production-check.md").read_text().splitlines(keepends=True)
+        omit = case.get("recipe_omits", [])
+        kept = [line for line in lines if not any(text in line for text in omit)]
+        (workspace / "docs/production-check.md").write_text("".join(kept))
     elif case["kind"] not in ("decision", "promises"):
         comparison = "<" if case["defective"] else "<="
         (workspace / "REQUIREMENTS.md").write_text(REQUIREMENTS)
@@ -381,9 +383,7 @@ def grade(case, directory):
         checks["excludes"] = not any(term.lower() in p for term in case.get("forbidden_terms", []) for p in promises)
     elif case["kind"] == "verdict":
         checks["action"] = response["action"] == case["expected_action"]
-        checks["verdict"] = response["verdict"] == case["expected_verdict"]
-        checks["revert"] = response["revert"] == case["expected_revert"]
-        for field in ("post", "ticket"):
+        for field in VERDICT_FIELDS:
             if "expected_" + field in case:
                 checks[field] = response[field] == case["expected_" + field]
     elif case["kind"] == "review":

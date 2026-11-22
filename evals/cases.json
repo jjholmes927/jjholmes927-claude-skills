@@ -500,13 +500,15 @@
       "skills/ship/SKILL.md",
       "skills/verify/SKILL.md"
     ],
-    "recipe": "production-check-no-identity.md",
     "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. The `deploy` status on `a1b2c3d` is success and nothing else has landed on main. The task's Linear ticket is NEV-321. The PR's one approved criterion, that each venue page shows its opening hours, passed as the canary at 1280 and 375 pixels wide, with two screenshots saved locally. No new error type since the deploy. `/up` returned 200 and `/health_check` returned `ok`. `gh` is logged in as the user and can comment on the PR. Return the verdict you would post, where it goes, what the ticket gets, and the next action.",
     "expected_action": "continue",
     "expected_verdict": "pass",
     "expected_revert": "none",
     "expected_post": "ticket_comment",
-    "expected_ticket": "verdict_comment"
+    "expected_ticket": "verdict_comment",
+    "recipe_omits": [
+      "**Agent identity:**"
+    ]
   },
   {
     "id": "prod-only-promise-not-amber-pre-merge",

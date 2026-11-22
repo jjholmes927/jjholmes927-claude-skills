@@ -57,7 +57,7 @@ The freshness check is timeboxed and non-fatal: if the registry is unreachable, 
 
 ## Step 5: Report with the evidence shown
 
-Exactly three statuses. Every promise from Step 1 gets one.
+Exactly three statuses, plus `checked after deploy` where ship's production check applies (below). Every promise from Step 1 gets one.
 
 - ✅ **Verified** — the command/action run, the observed output (pasted, trimmed), and one line on what it proves.
 - 🟡 **Partially verified** — what is proven, what is not, why, and where the remainder gets proven (staging, post-deploy query, hardware test).

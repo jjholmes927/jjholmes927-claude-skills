@@ -111,7 +111,7 @@ Format: `prefix: Imperative description`
 
 Every ship verifies behaviour before push — UI or not. Invoke **/verify**: it writes the promise, picks the evidence per change type (UI → verify-ui, telemetry → read-back, API/job → real invocation), and reports ✅/🟡/🔴 with the evidence shown. "Tests pass" is not verification.
 
-When the caller supplies approved acceptance criteria (E2E passes them from `.e2e/handoff.md`), give them to /verify so its promises come from the approved plan, not only the diff. When the base branch's guide (`origin/$PR_BASE_BRANCH`, never this checkout) has Step 10's production-check line, tell /verify: it marks promises only production can show `checked after deploy`, and Step 10 must check each one.
+When the caller supplies approved acceptance criteria (E2E passes them from `.e2e/handoff.md`), give them to /verify so its promises come from the approved plan, not only the diff. When the base branch's guide (`origin/$PR_BASE_BRANCH`, never this checkout; Step 9 condition 1's read with Step 10's line) has the production-check line, tell /verify: it marks promises only production can show `checked after deploy`, and Step 10 must check each one.
 
 Collect configured lint advisories with `python3 -B
 ${CLAUDE_PLUGIN_ROOT}/skills/e2e/scripts/advisory_review.py scan "$BASE"
@@ -366,7 +366,8 @@ for i in $(seq 1 14); do
   git fetch -q origin "$PR_BASE_BRANCH"
   rows=$(for sha in $(git rev-list --ancestry-path "$MERGE_SHA..origin/$PR_BASE_BRANCH") "$MERGE_SHA"; do
     deploy=$(gh api "repos/{owner}/{repo}/commits/$sha/status" --jq "[.statuses[] | select(.context == \"$DEPLOY_CONTEXT\") | .state][0] // \"none\"")
-    gate=$(gh run list --commit "$sha" --workflow "$GATING_WORKFLOW" --json status,conclusion --jq '.[0] | if . == null then "none" elif .status != "completed" then .status else .conclusion end')
+    gate=-
+    [ "$deploy" = none ] && gate=$(gh run list --commit "$sha" --workflow "$GATING_WORKFLOW" --json status,conclusion --jq '.[0] | if . == null then "none" elif .status != "completed" then .status else .conclusion end')
     echo "$sha deploy=$deploy gate=$gate"
   done)
   echo "$rows"
@@ -388,8 +389,8 @@ Deploy failed, skipped or timed out: post the last state as step 4 posts a verdi
 **2. Check production.** Invoke /verify with a production target: the recipe, `$DEPLOYED_SHA` and the approved acceptance criteria. It keeps the promises observable in production, including every one marked `checked after deploy` before the merge, and adds the recipe's error and health checks.
 
 **3. Verdict**, stamped `Production check @ $DEPLOYED_SHA`. First re-list main's deploys: another commit in the deployed range, or one deployed during the check, shares the window.
-- ✅ every promise observable in production passed and no new error type appeared. A PR with nothing user-visible gets ✅ labelled "nothing user-visible; data checks and errors clean". A promise that waits on a scheduled job which won't run during this check goes under `Deferred:` with the job and its next run time; it doesn't block ✅.
-- 🟡 something could not be checked (say what; a `checked after deploy` promise counts), the health check reports degraded while liveness passes, or another PR shares the window and a new error cannot be pinned on this PR alone (name both SHAs). Shared attribution is never 🔴: two agents must not open competing reverts.
+- ✅ every promise observable in production passed and no new error type appeared. A PR with nothing user-visible gets ✅ labelled "nothing user-visible; data checks and errors clean". verify's `Deferred:` list doesn't block ✅.
+- 🟡 something could not be checked (say what), the health check reports degraded while liveness passes, or another PR shares the window and a new error cannot be pinned on this PR alone (name both SHAs). Shared attribution is never 🔴: two agents must not open competing reverts.
 - 🔴 a promise of this PR fails in production, a new error type's route or stack touches this PR's files, or the liveness check fails.
 
 **4. Post and act.** Write the verdict to a file whose first line is exactly `## Production check @ <DEPLOYED_SHA>` (an emoji may follow), so it can be found by search. Then give each promise with its evidence, every query with its result, the error comparison, the health responses, the `Deferred:` list and where the screenshots are. Post it where the recipe allows, never with `gh pr comment` as the user:

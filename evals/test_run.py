@@ -148,8 +148,9 @@ class GraderTests(unittest.TestCase):
     def test_verdict_case_can_seed_another_recipe(self):
         workspace = self.prepare("no-agent-identity-falls-back-to-ticket")
         recipe = (workspace / "docs/production-check.md").read_text()
+        full = (run.FIXTURES / "production-check.md").read_text()
         self.assertNotIn("Agent identity", recipe)
-        self.assertIn("Agent identity", (run.FIXTURES / "production-check.md").read_text())
+        self.assertEqual(len(full.splitlines()) - 1, len(recipe.splitlines()))
 
     def test_missing_and_malformed_response_are_incomplete(self):
         self.prepare("pending-approval")
