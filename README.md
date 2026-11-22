@@ -167,6 +167,18 @@ python3 -B evals/plugin_eval.py run --model claude-opus-5-5 --concurrency 4
 python3 -B evals/plugin_eval.py run --model claude-opus-5-5 --case prod-check-pass --runs 1 --no-publish
 ```
 
+To check a skill change, compare it with its base before opening the PR:
+
+```bash
+python3 -B evals/compare.py origin/master --model claude-opus-5-5
+```
+
+It runs only the cases whose skill folders changed, on both versions, and
+prints a before/after table. A case that loses 2 or more of its 3 runs counts
+as a drop and the command exits 1; losing one run is normal wobble. Scores are
+cached in `~/.cache/skill-evals` by the case and its skill folders' contents,
+so an unchanged version never runs twice.
+
 Runs use your Claude login and count against its usage; the report shows the
 API-equivalent cost. Plan gates, promises, reviews and the implementation case
 have Python graders, so they still run only through `run.py`.
