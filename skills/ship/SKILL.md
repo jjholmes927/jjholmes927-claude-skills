@@ -332,13 +332,13 @@ done
 gh pr view <PR_NUMBER> --json state,mergeCommit --jq '"\(.state) \(.mergeCommit.oid)"'
 ```
 
-MERGED: record the merge commit SHA in the ship summary and the task handoff. Anything else after 30 minutes (still open, closed, or a failed required check): leave auto-merge queued, report the state and hand back. Where the guide opts into the production check, say that Step 10 will not run when the PR merges later.
+MERGED: record the merge commit SHA in the ship summary and the task handoff. Anything else after 30 minutes (still open, closed, or a failed required check): leave auto-merge queued unless a `checked after deploy` promise exists (below), report the state and hand back. Where the guide opts into the production check, say that Step 10 will not run when the PR merges later.
 
 **Stacks land bottom-up, in the same ship run.** Run this step for the bottom PR first. A child PR whose base is another feature branch fails condition 3 only for now: wait here for its parent's result rather than handing back. When the parent merges, GitHub retargets the child to the default branch only if the repository deletes head branches on merge (`gh api repos/{owner}/{repo} --jq .delete_branch_on_merge`). Once it is retargeted, rebase the child onto the default branch if GitHub reports it behind or conflicting, re-run Step 4 and the Step 6 gates for any change, push, re-watch CI, then run this step for it. Hand back if the parent hands back, or if the child is not retargeted within five minutes of the parent merging.
 
 When any condition fails, name it in the ship summary. In Kandev, ask the user to merge through the question tool and include that reason.
 
-**Any hand-back from this step leaves `checked after deploy` promises unchecked**, because Step 10 runs only after a merge in this run. Report each one as 🟡 not checked in the hand-back. If any exist and auto-merge is queued, disable it (`gh pr merge <PR_NUMBER> --disable-auto`) so the PR can't land unchecked without the user choosing to merge it.
+**Any hand-back from this step leaves `checked after deploy` promises unchecked**, because Step 10 runs only after a merge in this run. Report each one as 🟡 not checked in the hand-back. If any exist and auto-merge is queued, disable it (`gh pr merge <PR_NUMBER> --disable-auto`) so the PR can't land unchecked without the user choosing to merge it. Then re-read the PR state, even if disabling failed: if it merged in the meantime, record the merge SHA and run Step 10 instead of handing back. In a stack where earlier slices landed before a later one handed back, run Step 10 for the landed slices (`$BEFORE_SHA` as usual), and report the rest as unchecked.
 
 ## Step 10: Check production (opt-in repositories only)
 
