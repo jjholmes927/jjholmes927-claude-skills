@@ -384,7 +384,7 @@ Every row contains `$MERGE_SHA`; the first row is the newest. Read them in order
 - A **cancelled** run means a newer commit superseded it: keep waiting on the newer commit.
 - Still waiting after 30 minutes → **deploy timed out**.
 
-Deploy failed, skipped or timed out: post the last state as step 4 posts a verdict, and hand back. There is no production verdict to give and no revert PR to open.
+Deploy failed, skipped or timed out: stop and hand back. There is no production verdict to give and no revert PR to open; report the last state where step 4 would post a verdict.
 
 **2. Check production.** Invoke /verify with a production target: the recipe, `$DEPLOYED_SHA` and the approved acceptance criteria. It keeps the promises observable in production, including every one marked `checked after deploy` before the merge, and adds the recipe's error and health checks.
 
