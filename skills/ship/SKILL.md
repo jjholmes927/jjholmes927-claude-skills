@@ -111,7 +111,7 @@ Format: `prefix: Imperative description`
 
 Every ship verifies behaviour before push — UI or not. Invoke **/verify**: it writes the promise, picks the evidence per change type (UI → verify-ui, telemetry → read-back, API/job → real invocation), and reports ✅/🟡/🔴 with the evidence shown. "Tests pass" is not verification.
 
-When the caller supplies approved acceptance criteria (E2E passes them from `.e2e/handoff.md`), give them to /verify so its promises come from the approved plan, not only the diff.
+When the caller supplies approved acceptance criteria (E2E passes them from `.e2e/handoff.md`), give them to /verify so its promises come from the approved plan, not only the diff. When the base branch's guide (`origin/$PR_BASE_BRANCH`, never this checkout) has Step 10's production-check line, tell /verify: it marks promises only production can show `checked after deploy`, and Step 10 must check each one.
 
 Collect configured lint advisories with `python3 -B
 ${CLAUDE_PLUGIN_ROOT}/skills/e2e/scripts/advisory_review.py scan "$BASE"
@@ -311,7 +311,7 @@ Merging deploys in many repositories, so landing is opt-in per repository. Leave
    [ $((classic + rules)) -gt 0 ] && echo "required checks present" || echo "NO REQUIRED CHECKS"
    ```
 3. The PR's base is the repository's default branch (stacked PRs: see below).
-4. The /verify verdict for the pushed tree is ✅ for every promise.
+4. The /verify verdict for the pushed tree is ✅ for every promise, or `checked after deploy` where Step 4 found the production-check line.
 5. Steps 7 and 8 ended green on this PR's head, every configured review bot has posted on this PR (an intermediate stack PR waits for them here, because Step 8 skipped that wait), no P1/P2 finding is unresolved, and the PR is not a draft.
 
 When all hold, queue the merge pinned to the verified head. If the command fails (for example, the repository has auto-merge switched off), hand back; never retry with `--admin` or without `--auto`:
@@ -356,7 +356,7 @@ else git show "$BEFORE_SHA:$RECIPE"; fi
 - **NOT opted in** → skip this step: ship is done. Say so in the ship summary; there is nothing to ask the user.
 - **RECIPE UNREADABLE** → the line is there but its recipe is missing: no check. Report it and ask the user.
 
-The recipe owns every repository fact: production URL, deploy signal, login and account rules, read-only data path, error and health checks. Never fill a gap with a guess; a fact it does not state is a check you could not run (🟡). A stack checks once, after its last PR merges (`$MERGE_SHA` is that merge), with every landed slice's criteria.
+The recipe owns every repository fact: production URL, deploy signal, login and account rules, read-only data path, error and health checks, agent identity. Never fill a gap with a guess; a fact it does not state is a check you could not run (🟡). A stack checks once, after its last PR merges (`$MERGE_SHA` is that merge), with every landed slice's criteria.
 
 **1. Wait for the deploy.** A newer push to main can cancel the CI run for `$MERGE_SHA`, so watch every main commit that contains it. The loop needs two recipe facts: the **Deploy signal**, a commit-status context (`$DEPLOY_CONTEXT`), and the **Deploy gating workflow** whose success triggers the deploy (`$GATING_WORKFLOW`). Other workflows never count. For another kind of signal, poll it with the same bounds and rules. One call stays under eight minutes; repeat it up to four times (about 30 minutes in all), or run it in the background where the harness supports that:
 
@@ -366,7 +366,7 @@ for i in $(seq 1 14); do
   git fetch -q origin "$PR_BASE_BRANCH"
   rows=$(for sha in $(git rev-list --ancestry-path "$MERGE_SHA..origin/$PR_BASE_BRANCH") "$MERGE_SHA"; do
     deploy=$(gh api "repos/{owner}/{repo}/commits/$sha/status" --jq "[.statuses[] | select(.context == \"$DEPLOY_CONTEXT\") | .state][0] // \"none\"")
-    gate=$(gh run list --commit "$sha" --workflow "$GATING_WORKFLOW" --json conclusion --jq '.[0].conclusion // "none"')
+    gate=$(gh run list --commit "$sha" --workflow "$GATING_WORKFLOW" --json status,conclusion --jq '.[0] | if . == null then "none" elif .status != "completed" then .status else .conclusion end')
     echo "$sha deploy=$deploy gate=$gate"
   done)
   echo "$rows"
@@ -383,16 +383,21 @@ Every row contains `$MERGE_SHA`; the first row is the newest. Read them in order
 - A **cancelled** run means a newer commit superseded it: keep waiting on the newer commit.
 - Still waiting after 30 minutes → **deploy timed out**.
 
-Deploy failed, skipped or timed out: post the last state on the PR and in the handoff, and hand back. There is no production verdict to give and no revert PR to open.
+Deploy failed, skipped or timed out: post the last state as step 4 posts a verdict, and hand back. There is no production verdict to give and no revert PR to open.
 
-**2. Check production.** Invoke /verify with a production target: the recipe, `$DEPLOYED_SHA` and the approved acceptance criteria. It keeps the promises observable in production and adds the recipe's error and health checks.
+**2. Check production.** Invoke /verify with a production target: the recipe, `$DEPLOYED_SHA` and the approved acceptance criteria. It keeps the promises observable in production, including every one marked `checked after deploy` before the merge, and adds the recipe's error and health checks.
 
 **3. Verdict**, stamped `Production check @ $DEPLOYED_SHA`. First re-list main's deploys: another commit in the deployed range, or one deployed during the check, shares the window.
-- ✅ every promise observable in production passed and no new error type appeared. A PR with nothing user-visible gets ✅ labelled "nothing user-visible; data checks and errors clean".
-- 🟡 something could not be checked (say what), the health check reports degraded while liveness passes, or another PR shares the window and a new error cannot be pinned on this PR alone (name both SHAs). Shared attribution is never 🔴: two agents must not open competing reverts.
+- ✅ every promise observable in production passed and no new error type appeared. A PR with nothing user-visible gets ✅ labelled "nothing user-visible; data checks and errors clean". A promise that waits on a scheduled job which won't run during this check goes under `Deferred:` with the job and its next run time; it doesn't block ✅.
+- 🟡 something could not be checked (say what; a `checked after deploy` promise counts), the health check reports degraded while liveness passes, or another PR shares the window and a new error cannot be pinned on this PR alone (name both SHAs). Shared attribution is never 🔴: two agents must not open competing reverts.
 - 🔴 a promise of this PR fails in production, a new error type's route or stack touches this PR's files, or the liveness check fails.
 
-**4. Post and act.** Post the verdict as a PR comment (`gh pr comment <PR_NUMBER> --body-file <file>`): each promise with its evidence, every query with its result, the error comparison, the health responses and the screenshots (attached per Step 6's attachment policy). Copy it into the ship summary and the task handoff.
+**4. Post and act.** Write the verdict to a file whose first line is exactly `## Production check @ <DEPLOYED_SHA>` (an emoji may follow), so it can be found by search. Then give each promise with its evidence, every query with its result, the error comparison, the health responses, the `Deferred:` list and where the screenshots are. Post it where the recipe allows, never with `gh pr comment` as the user:
+- **Agent identity** in the recipe (a command that stands in for `gh` and posts as the agent's own account) → `<agent identity> pr comment <PR_NUMBER> --body-file <file>`. When a Linear ticket exists, add a one-line ticket comment linking to the comment URL it prints.
+- No agent identity → the verdict itself is the ticket comment.
+- No ticket either → the handoff and your final message only.
+
+Attach the screenshots to the ticket through the Linear connector (`prepare_attachment_upload`, a raw PUT of the file with the signed headers, then `create_attachment_from_upload`, one file at a time); without a ticket, keep their paths in the handoff. Never create a Linear issue. Copy the verdict into the ship summary and the task handoff.
 - ✅ → done.
 - 🟡 → report what was not checked and ask the user (in Kandev, through the question tool). No revert PR.
 - 🔴 → don't ask yet: the comment above reports it, so add it to the handoff and any ticket comment and go straight on. Open a revert PR: a branch from the updated base named per Step 2 and ending `-revert-<PR_NUMBER>`, and `git revert --no-edit "$MERGE_SHA"`. If the revert conflicts, `git revert --abort` and hand back with the conflict; never resolve it. Run /verify on its one promise, "back to pre-merge behaviour", with the revert commit's diff inverting `$MERGE_SHA` as the evidence, then Step 6 to open the PR. Skip Step 5 and review fixes so it stays a clean revert. A stack gets one revert PR per landed slice, each reverting that slice's merge commit, newest first and each based on the one before. Then ask the user once with the evidence and the revert PR links (in Kandev, through the question tool) and hand back, without waiting on CI or bots. Never run Step 9 or this step on a revert PR and never merge it, whatever the merge policy says.
@@ -415,6 +420,7 @@ Deploy failed, skipped or timed out: post the last state on the PR and in the ha
 - About to queue auto-merge when the base branch's guide has no merge-policy line (including a PR that adds the line), or the base has no required checks → don't; hand the merge to the user
 - About to run Step 10 because the production-check line or recipe is in this checkout or in main after a merge → read both from `$BEFORE_SHA`; no PR or stack slice opts itself in
 - About to merge a revert PR, or run Step 9 on one → don't; the user decides on every revert
+- About to post a production verdict with `gh pr comment` as the user → post through the recipe's agent identity, or fall back to the ticket or handoff
 - About to click a review-queue or admin action, or anything else the recipe's account rules forbid, as the production account → don't; that promise is 🟡 not checked
 - About to read production through `rails runner`, a console or SSH → use the recipe's read-only path; application code can send email, call APIs or enqueue jobs
 - A production ✅ for a UI promise without screenshots → it is not a ✅

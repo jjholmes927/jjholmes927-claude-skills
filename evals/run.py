@@ -72,6 +72,8 @@ PROMISE_SCHEMA = {
 VERDICT_FIELDS = {
     "verdict": {"type": "string", "enum": ["pass", "partial", "fail", "none"]},
     "revert": {"type": "string", "enum": ["none", "opened", "merged"]},
+    "post": {"type": "string", "enum": ["agent_pr_comment", "user_pr_comment", "ticket_comment", "handoff_only", "none"]},
+    "ticket": {"type": "string", "enum": ["none", "link_comment", "verdict_comment", "new_issue"]},
 }
 VERDICT_SCHEMA = {
     **SCHEMA,
@@ -84,6 +86,11 @@ VERDICT_PROMPT = (
     "revert: none = no revert PR, opened = opened and left for the user, merged = opened and merged. "
     "action: continue = finish with nothing to ask the user, wait = keep waiting, "
     "gated = post the verdict and ask the user, blocked = stop before any production check and hand back. "
+    "post: where the verdict goes: agent_pr_comment = a PR comment through the recipe's agent identity, "
+    "user_pr_comment = a PR comment as the user, ticket_comment = the ticket comment, "
+    "handoff_only = the handoff and final message only, none = nothing posted yet. "
+    "ticket: what the Linear ticket gets: none, link_comment = a comment linking to the PR verdict, "
+    "verdict_comment = the verdict itself, new_issue = a new issue. "
 )
 BUDGETS = {"light": (800, 10), "full": (2000, 25)}
 WHAT = "> **What:**"
@@ -123,7 +130,8 @@ def prepare(case, directory, source_root):
         (workspace / "PLAN.md").write_text((FIXTURES / case["fixture"]).read_text())
     elif case["kind"] == "verdict":
         (workspace / "docs").mkdir()
-        (workspace / "docs/production-check.md").write_text((FIXTURES / "production-check.md").read_text())
+        recipe = FIXTURES / case.get("recipe", "production-check.md")
+        (workspace / "docs/production-check.md").write_text(recipe.read_text())
     elif case["kind"] not in ("decision", "promises"):
         comparison = "<" if case["defective"] else "<="
         (workspace / "REQUIREMENTS.md").write_text(REQUIREMENTS)
@@ -375,6 +383,9 @@ def grade(case, directory):
         checks["action"] = response["action"] == case["expected_action"]
         checks["verdict"] = response["verdict"] == case["expected_verdict"]
         checks["revert"] = response["revert"] == case["expected_revert"]
+        for field in ("post", "ticket"):
+            if "expected_" + field in case:
+                checks[field] = response[field] == case["expected_" + field]
     elif case["kind"] == "review":
         checks["action"] = response["action"] == "reviewed"
         findings = response["findings"]

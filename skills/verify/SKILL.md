@@ -65,6 +65,8 @@ Exactly three statuses. Every promise from Step 1 gets one.
 
 A verification that was skipped without being declared is a failure of this command — silence is the one prohibited outcome.
 
+**Checked after deploy.** When ship says the base branch's guide opts into its production check, a promise only production can show (real third-party data, live traffic, a production-only integration) is marked `checked after deploy` with what to check, instead of 🟡. It doesn't lower the verdict, and ship Step 10 must check it. Anything a local or staging run can show still needs its evidence here.
+
 ## Step 6: Bind the verdict to the exact code that was verified
 
 A verdict is only true for the tree it was run against. Record it against a fingerprint of the working tree (tracked + uncommitted + untracked, ignored files excluded) so ship can refuse to push anything that changed afterwards. Committing the verified content does not change the fingerprint; editing a line does.
@@ -79,7 +81,7 @@ TREE=$(GIT_INDEX_FILE="$IDX" git -C "$TOP" write-tree); rm -f "$IDX"
 mkdir -p "$TOP/.verify"
 ```
 
-Write `$TOP/.verify/$TREE.json` when the overall verdict is ✅ or 🟡:
+Write `$TOP/.verify/$TREE.json` when the overall verdict is ✅ or 🟡 (a `checked after deploy` promise has status `after-deploy`):
 
 ```json
 {"tree": "<TREE>", "head": "<output of git rev-parse HEAD, informational only — ship matches on tree>", "at": "<ISO-8601 UTC>", "verdict": "verified|partial",
@@ -92,7 +94,7 @@ Rules: a 🔴 verdict writes nothing (ship's loud 🔴 path stays the only way p
 
 Ship Step 10 calls verify after a deploy with the production check recipe as ship read it from main before the merge, the deployed SHA and the approved acceptance criteria. That text supplies every production fact; never substitute one it does not state, and never read the recipe from the checkout.
 
-- **Promises:** write them as in Step 1, then keep only those observable in production: UI, data and errors. Mark the rest "covered pre-merge" (internal structure and behaviour the pre-merge verdict already proved). An observable promise this session cannot check (a missing tool or login, or an action the recipe's account rules forbid) is 🟡 naming the blocker. Never take a forbidden action to get evidence.
+- **Promises:** write them as in Step 1, then keep only those observable in production: UI, data and errors. Mark the rest "covered pre-merge" (internal structure and behaviour the pre-merge verdict already proved). An observable promise this session cannot check (a missing tool or login, or an action the recipe's account rules forbid) is 🟡 naming the blocker. Never take a forbidden action to get evidence. A promise marked `checked after deploy` is never "covered pre-merge": check it now or mark it 🟡. A promise that waits on a scheduled job which won't run during this check goes under `Deferred:` with the job and its next run time, not 🟡.
 - **UI:** through verify-ui at the recipe's URL with its documented login and account rules, at desktop and phone width, with screenshots.
 - **Data:** read-only queries through the read-only path the recipe names, each query shown with its result. Never an app console, runner or SSH session: application code can send email, call APIs or enqueue jobs.
 - **Errors and health:** the recipe's error check (error types new since the deploy, each with its route or stack) and its liveness and health checks, responses shown.

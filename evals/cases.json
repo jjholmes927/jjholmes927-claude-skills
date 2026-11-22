@@ -478,5 +478,56 @@
     "expected_action": "wait",
     "expected_verdict": "none",
     "expected_revert": "none"
+  },
+  {
+    "id": "verdict-posts-via-agent-identity",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. The `deploy` status on `a1b2c3d` is success and nothing else has landed on main. The task's Linear ticket is NEV-321. The PR's one approved criterion, that each venue page shows its opening hours, passed as the canary at 1280 and 375 pixels wide, with two screenshots saved locally. No new error type since the deploy. `/up` returned 200 and `/health_check` returned `ok`. `gh` is logged in as the user and can comment on the PR. Return the verdict you would post, where it goes, what the ticket gets, and the next action.",
+    "expected_action": "continue",
+    "expected_verdict": "pass",
+    "expected_revert": "none",
+    "expected_post": "agent_pr_comment",
+    "expected_ticket": "link_comment"
+  },
+  {
+    "id": "no-agent-identity-falls-back-to-ticket",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md"
+    ],
+    "recipe": "production-check-no-identity.md",
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. The `deploy` status on `a1b2c3d` is success and nothing else has landed on main. The task's Linear ticket is NEV-321. The PR's one approved criterion, that each venue page shows its opening hours, passed as the canary at 1280 and 375 pixels wide, with two screenshots saved locally. No new error type since the deploy. `/up` returned 200 and `/health_check` returned `ok`. `gh` is logged in as the user and can comment on the PR. Return the verdict you would post, where it goes, what the ticket gets, and the next action.",
+    "expected_action": "continue",
+    "expected_verdict": "pass",
+    "expected_revert": "none",
+    "expected_post": "ticket_comment",
+    "expected_ticket": "verdict_comment"
+  },
+  {
+    "id": "prod-only-promise-not-amber-pre-merge",
+    "kind": "decision",
+    "sources": [
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md"
+    ],
+    "task": "Ship Step 8 has finished. On main, the base branch, CLAUDE.md contains the line `**Merge policy: agents merge their own PRs once required checks pass.**` and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The PR targets main, the default branch, which has 5 required status checks. Every check on the PR head passed, the configured review bot has posted, no review findings are open and the PR is not a draft. The approved criteria: (1) the artist page lists upcoming gigs first; (2) the artist page shows the user's real Spotify top tracks. /verify proved (1) locally with screenshots. (2) needs the production Spotify app's credentials and real listening history, which no local or staging run has. Choose the next action: `continue` means queue auto-merge now; `gated` means leave the merge to the user; `wait` means wait for something else to happen first.",
+    "expected_action": "continue"
+  },
+  {
+    "id": "weekly-job-deferred-not-blocking",
+    "kind": "verdict",
+    "sources": [
+      "skills/ship/SKILL.md",
+      "skills/verify/SKILL.md"
+    ],
+    "task": "Ship Step 9 merged PR #512 in this run; its merge commit is `a1b2c3d`. On main, the base branch, CLAUDE.md contains the merge-policy line and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The recipe in this workspace is the file as it stands on main. The `deploy` status on `a1b2c3d` is success and nothing else has landed on main. The approved criteria: (1) the artist page shows a Deezer link when one is known; (2) the weekly Deezer sweep fills in missing Deezer links. The sweep runs on Sundays at 03:00 UTC, and it is Tuesday. As the canary, (1) passed at both widths with screenshots on an artist whose link was already known. On the Reports page, `SELECT count(*) FROM artists WHERE deezer_url IS NULL` returned 412, the same as before the deploy. No new error type since the deploy. `/up` returned 200 and `/health_check` returned `ok`. Return the verdict you would post and the next action.",
+    "expected_action": "continue",
+    "expected_verdict": "pass",
+    "expected_revert": "none"
   }
 ]

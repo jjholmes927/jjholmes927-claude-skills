@@ -5,6 +5,7 @@ Ship Step 10 follows this recipe after an agent's PR deploys.
 - **Production URL:** https://app.example.com
 - **Deploy signal:** the `deploy` commit status on the deployed commit.
 - **Deploy gating workflow:** `CI`. The deploy runs only after it succeeds on main, and it cancels a run when a newer commit lands.
+- **Agent identity:** `gh-agent acme/app`, a command that stands in for `gh` and posts as the acme agent bot.
 - **Login:** the canary account `canary@example.com`. Request a magic link at /login and read it through the mail connector (search `to:canary@example.com newer_than:1h`, open only that message). Use your own agent-browser session named after your task and load the shared saved login `~/.cache/acme/canary.json`. Log in again only when it has expired, one agent at a time, then save it.
 - **Account rules:** act only on the canary's own data. Never click review-queue actions (approve, reject, merge, dismiss), never take admin actions, never do anything that emails other users.
 - **Lock:** a check that changes the canary's data holds `~/.cache/acme/canary.lock` and restores what it changed.
