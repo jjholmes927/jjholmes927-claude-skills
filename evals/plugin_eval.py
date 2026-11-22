@@ -72,30 +72,45 @@ def scaffold(seeded):
     return script + FIXTURE_COMMIT
 
 
+def spec(case):
+    return {
+        "schema_version": "1.0",
+        "name": case["id"],
+        "tags": [case["kind"], *skills(case)],
+        "execution": {"prompt": prompt(case), "max_turns": 20, "timeout_seconds": 300, "allowed_tools": TOOLS},
+        "runs": 3,
+        "graders": graders(case),
+    }
+
+
 def write(cases, out):
     selected = [case for case in cases if case["kind"] in KINDS]
     payloads = {}
     for case in selected:
         seeded = files(case)
-        payloads[case["id"]] = (case, scaffold(seeded) if seeded else None)
+        payloads[case["id"]] = (spec(case), scaffold(seeded) if seeded else None)
     if out.exists():
         shutil.rmtree(out)
-    for case_id, (case, script) in payloads.items():
+    for case_id, (case_spec, script) in payloads.items():
         directory = out / case_id
         directory.mkdir(parents=True)
-        spec = {
-            "schema_version": "1.0",
-            "name": case_id,
-            "tags": [case["kind"], *skills(case)],
-            "execution": {"prompt": prompt(case), "max_turns": 20, "timeout_seconds": 300, "allowed_tools": TOOLS},
-            "runs": 3,
-            "graders": graders(case),
-        }
         if script:
             (directory / "scaffold.sh").write_text(script)
-            spec["context"] = {"scaffold_script": "scaffold.sh"}
-        (directory / "case.yaml").write_text(json.dumps(spec, indent=2) + "\n")
+            case_spec["context"] = {"scaffold_script": "scaffold.sh"}
+        (directory / "case.yaml").write_text(json.dumps(case_spec, indent=2) + "\n")
     return list(payloads)
+
+
+def eval_command(root, model, runs=None, ablation=None, concurrency=None, json_path=None, tags=(),
+                 no_publish=False, keep_temp=False):
+    command = ["claude", "plugin", "eval", str(root), "--scaffold", "--trust-plugin", "--model", model]
+    for flag, value in (("--runs", runs), ("--ablation", ablation), ("--concurrency", concurrency),
+                        ("--json", json_path)):
+        if value:
+            command += [flag, str(value)]
+    for value in tags:
+        command += ["--tag", value]
+    return command + [flag for flag, on in (("--no-publish", no_publish), ("--keep-temp", keep_temp)) if on]
 
 
 def main(argv=None):
@@ -117,14 +132,8 @@ def main(argv=None):
     print(f"Generated {len(written)} cases in {OUT}", flush=True)
     if args.mode == "generate":
         return 0
-    command = ["claude", "plugin", "eval", str(run.ROOT), "--scaffold", "--trust-plugin", "--model", args.model]
-    for flag, value in (("--runs", args.runs), ("--ablation", args.ablation),
-                        ("--concurrency", args.concurrency), ("--json", args.json)):
-        if value:
-            command += [flag, value]
-    for value in args.tag:
-        command += ["--tag", value]
-    command += [flag for flag, on in (("--no-publish", args.no_publish), ("--keep-temp", args.keep_temp)) if on]
+    command = eval_command(run.ROOT, args.model, args.runs, args.ablation, args.concurrency, args.json, args.tag,
+                           args.no_publish, args.keep_temp)
     return subprocess.run(command).returncode
 
 
