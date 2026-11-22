@@ -72,6 +72,10 @@ class GraderTests(unittest.TestCase):
         self.case = next(c for c in run.CASES if c["id"] == identifier)
         return run.prepare(self.case, self.directory, run.ROOT)
 
+    def prepare_again(self, identifier):
+        self.directory = self.directory.with_name(identifier)
+        return self.prepare(identifier)
+
     def answer(self, action, findings=None, target=None, **gate):
         response = {"action": action, "reason": "Evidence for the decision",
                     "target_url": target, "findings": findings or [], **gate}
@@ -109,8 +113,8 @@ class GraderTests(unittest.TestCase):
         self.assertEqual("incomplete", self.answer("verify")["status"])
         self.assertEqual("incomplete", self.promise(["  "])["status"])
 
-    def verdict(self, action, verdict, revert="none"):
-        return self.answer(action, verdict=verdict, revert=revert)
+    def verdict(self, action, verdict, revert="none", post="none", ticket="none"):
+        return self.answer(action, verdict=verdict, revert=revert, post=post, ticket=ticket)
 
     def test_verdict_case_seeds_the_recipe_without_pricing(self):
         workspace = self.prepare("error-spike-opens-revert-not-merged")
@@ -131,6 +135,22 @@ class GraderTests(unittest.TestCase):
         self.assertEqual("incomplete", self.verdict("continue", "green")["status"])
         self.assertEqual("incomplete", self.verdict("continue", "pass", "maybe")["status"])
         self.assertEqual("incomplete", self.answer("continue", verdict="pass")["status"])
+        self.assertEqual("incomplete", self.verdict("continue", "pass", post="gh")["status"])
+
+    def test_verdict_case_grades_post_and_ticket_only_when_expected(self):
+        self.prepare("verdict-posts-via-agent-identity")
+        self.assertEqual("pass", self.verdict("continue", "pass", post="agent_pr_comment", ticket="link_comment")["status"])
+        self.assertEqual(["post"], self.failed(self.verdict("continue", "pass", post="user_pr_comment", ticket="link_comment")))
+        self.assertEqual(["ticket"], self.failed(self.verdict("continue", "pass", post="agent_pr_comment", ticket="new_issue")))
+        self.prepare_again("prod-check-pass")
+        self.assertEqual("pass", self.verdict("continue", "pass", post="handoff_only")["status"])
+
+    def test_verdict_case_can_seed_another_recipe(self):
+        workspace = self.prepare("no-agent-identity-falls-back-to-ticket")
+        recipe = (workspace / "docs/production-check.md").read_text()
+        full = (run.FIXTURES / "production-check.md").read_text()
+        self.assertNotIn("Agent identity", recipe)
+        self.assertEqual(len(full.splitlines()) - 1, len(recipe.splitlines()))
 
     def test_missing_and_malformed_response_are_incomplete(self):
         self.prepare("pending-approval")
