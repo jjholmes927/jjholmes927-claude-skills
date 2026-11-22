@@ -350,6 +350,8 @@ RECIPE=$(printf '%s' "$LINE" | sed -n 's/.*](\([^)]*\)).*/\1/p')
 [ -n "$LINE" ] && git show "$MERGE_SHA^:$RECIPE" || echo "NOT opted in"
 ```
 
+Not opted in → skip this step: ship is done. Say so in the ship summary; there is nothing to ask the user.
+
 The recipe owns every repository fact: production URL, deploy signal, login and account rules, read-only data path, error and health checks. Never fill a gap with a guess; a fact it does not state is a check you could not run (🟡). A stack checks once, after its last PR merges, with every landed slice's criteria.
 
 **1. Wait for the deploy.** A newer push to main can cancel the CI run for `$MERGE_SHA`, so watch every main commit that contains it. The loop assumes the recipe's signal is a commit status whose context it names (`$DEPLOY_CONTEXT`); poll any other signal with the same bounds and rules. One call stays under eight minutes; repeat it up to four times (about 30 minutes in all), or run it in the background where the harness supports that:
