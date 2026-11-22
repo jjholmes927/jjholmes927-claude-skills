@@ -128,3 +128,4 @@ jobs:
           bash skills/codex-collab/scripts/test-collab-codex.sh
           python -B -m unittest discover -s skills/e2e/scripts -p 'test_*.py'
           python -B -m unittest discover -s scripts -p 'test_*.py'
+          python -B -m unittest discover -s evals -p 'test_*.py'

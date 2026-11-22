@@ -179,6 +179,13 @@ as a drop and the command exits 1; losing one run is normal wobble. Scores are
 cached in `~/.cache/skill-evals` by the case and its skill folders' contents,
 so an unchanged version never runs twice.
 
+When no case drops and every case has a score, `compare.py` prints an
+`eval-stamp:` line. A PR that changes a skill some case covers must carry that
+line in its body (inside a collapsed `<details>` block with the table is fine):
+the eval-stamp CI job recomputes it from the PR head and fails when it is
+missing or stale. The job never calls a model. A run narrowed with `--case`
+prints no stamp.
+
 Runs use your Claude login and count against its usage; the report shows the
 API-equivalent cost. Plan gates, promises, reviews and the implementation case
 have Python graders, so they still run only through `run.py`.
