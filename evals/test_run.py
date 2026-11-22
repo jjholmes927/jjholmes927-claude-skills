@@ -109,6 +109,29 @@ class GraderTests(unittest.TestCase):
         self.assertEqual("incomplete", self.answer("verify")["status"])
         self.assertEqual("incomplete", self.promise(["  "])["status"])
 
+    def verdict(self, action, verdict, revert="none"):
+        return self.answer(action, verdict=verdict, revert=revert)
+
+    def test_verdict_case_seeds_the_recipe_without_pricing(self):
+        workspace = self.prepare("error-spike-opens-revert-not-merged")
+        recipe = (run.FIXTURES / "production-check.md").read_text()
+        self.assertEqual(recipe, (workspace / "docs/production-check.md").read_text())
+        self.assertFalse((workspace / "pricing.py").exists())
+        self.assertIn("For verdict cases", (self.directory / "prompt.txt").read_text())
+
+    def test_verdict_case_grades_action_verdict_and_revert(self):
+        self.prepare("error-spike-opens-revert-not-merged")
+        self.assertEqual("pass", self.verdict("gated", "fail", "opened")["status"])
+        self.assertEqual(["revert"], self.failed(self.verdict("gated", "fail", "merged")))
+        self.assertEqual(["verdict", "revert"], self.failed(self.verdict("gated", "partial")))
+        self.assertEqual(["action"], self.failed(self.verdict("continue", "fail", "opened")))
+
+    def test_verdict_case_rejects_unknown_or_missing_fields(self):
+        self.prepare("prod-check-pass")
+        self.assertEqual("incomplete", self.verdict("continue", "green")["status"])
+        self.assertEqual("incomplete", self.verdict("continue", "pass", "maybe")["status"])
+        self.assertEqual("incomplete", self.answer("continue", verdict="pass")["status"])
+
     def test_missing_and_malformed_response_are_incomplete(self):
         self.prepare("pending-approval")
         self.assertEqual("incomplete", run.grade(self.case, self.directory)["status"])

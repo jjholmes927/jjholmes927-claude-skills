@@ -1,11 +1,11 @@
 ---
 name: ship
-description: End-to-end PR workflow — format, commit, verify behaviour with evidence (always, via /verify), push, open the PR, watch CI fail-fast, consolidate Bugbot and AI-review feedback, then land the PR where the repository opts into agent merges. Use when work is ready to become a pull request, or the user asks to ship it.
+description: End-to-end PR workflow — format, commit, verify behaviour with evidence (always, via /verify), push, open the PR, watch CI fail-fast, consolidate Bugbot and AI-review feedback, then land the PR and check production where the repository opts in. Use when work is ready to become a pull request, or the user asks to ship it.
 ---
 
 # Ship
 
-End-to-end workflow: format, branch, commit, verify with evidence, push, PR, fail-fast CI watch, consolidate review feedback, land on green where the repository opts in.
+End-to-end workflow: format, branch, commit, verify with evidence, push, PR, fail-fast CI watch, consolidate review feedback, land on green and check production after the deploy where the repository opts in.
 
 ## Workflow
 
@@ -21,6 +21,8 @@ Preflight → Format → Stage → Branch (if on main) → Commit → Verify (AL
                          fix valid → push
                                     │
                     Land on green (opt-in repos only)
+                                    │
+                Check production after deploy (opt-in repos only)
                                     │
                                   Done
 ```
@@ -336,6 +338,56 @@ MERGED: record the merge commit SHA in the ship summary and the task handoff. An
 
 When any condition fails, name it in the ship summary. In Kandev, ask the user to merge through the question tool and include that reason.
 
+## Step 10: Check production (opt-in repositories only)
+
+/verify proved the branch; production runs what landed on main. Run this step only when Step 9 merged the PR in this run (`$MERGE_SHA` is the merge commit it recorded) **and** the repository guide on the base branch before that merge contains the line `**Production check: agents verify production after their PRs deploy.**` Read it from the merge commit's parent, never from this checkout or the base after the merge: a PR must not opt itself in. The line links the repository's recipe; read that from the same commit:
+
+```bash
+git fetch -q origin "$PR_BASE_BRANCH"
+LINE=$(for f in CLAUDE.md AGENTS.md; do git show "$MERGE_SHA^:$f" 2>/dev/null; done \
+  | grep -F '**Production check: agents verify production after their PRs deploy.**' | head -n 1)
+RECIPE=$(printf '%s' "$LINE" | sed -n 's/.*](\([^)]*\)).*/\1/p')
+[ -n "$LINE" ] && git show "$MERGE_SHA^:$RECIPE" || echo "NOT opted in"
+```
+
+The recipe owns every repository fact: production URL, deploy signal, login and account rules, read-only data path, error and health checks. Never fill a gap with a guess; a fact it does not state is a check you could not run (🟡). A stack checks once, after its last PR merges, with every landed slice's criteria.
+
+**1. Wait for the deploy.** A newer push to main can cancel the CI run for `$MERGE_SHA`, so watch every main commit that contains it. The loop assumes the recipe's signal is a commit status whose context it names (`$DEPLOY_CONTEXT`); poll any other signal with the same bounds and rules. One call stays under eight minutes; repeat it up to four times (about 30 minutes in all), or run it in the background where the harness supports that:
+
+```bash
+for i in $(seq 1 24); do
+  git fetch -q origin "$PR_BASE_BRANCH"
+  rows=$(for sha in $(git rev-list --ancestry-path "$MERGE_SHA..origin/$PR_BASE_BRANCH") "$MERGE_SHA"; do
+    deploy=$(gh api "repos/{owner}/{repo}/commits/$sha/status" --jq "[.statuses[] | select(.context == \"$DEPLOY_CONTEXT\") | .state][0] // \"none\"")
+    ci=$(gh run list --commit "$sha" --json workflowName,conclusion --jq 'map("\(.workflowName)=\(.conclusion)") | join(",")')
+    echo "$sha deploy=$deploy ci=$ci"
+  done)
+  echo "$rows"
+  echo "$rows" | grep -qE 'deploy=(success|failure|error)|=[a-z_]*failure' && break
+  sleep 20
+done
+```
+
+Read the rows newest first:
+- The first row with a deploy result decides: `success` → record that commit as `$DEPLOYED_SHA` and continue; `failure` or `error` → **deploy failed**.
+- No deploy result and a CI run that **failed** on any row → **main CI red, deploy skipped**. Only a failure means this.
+- A **cancelled** run means a newer commit superseded it: keep waiting on the newer commit's signal.
+- Still pending after 30 minutes → **deploy timed out**.
+
+Deploy failed, skipped or timed out: post the last state on the PR and in the handoff, and hand back. There is no production verdict to give and no revert PR to open.
+
+**2. Check production.** Invoke /verify with a production target: the recipe, `$DEPLOYED_SHA` and the approved acceptance criteria. It keeps the promises observable in production and adds the recipe's error and health checks.
+
+**3. Verdict**, stamped `Production check @ $DEPLOYED_SHA`. First re-list main's deploys: another commit in the deployed range, or one deployed during the check, shares the window.
+- ✅ every promise observable in production passed and no new error type appeared. A PR with nothing user-visible gets ✅ labelled "nothing user-visible; data checks and errors clean".
+- 🟡 something could not be checked (say what), the health check reports degraded while liveness passes, or another PR shares the window and a new error cannot be pinned on this PR alone (name both SHAs). Shared attribution is never 🔴: two agents must not open competing reverts.
+- 🔴 a promise of this PR fails in production, a new error type's route or stack touches this PR's files, or the liveness check fails.
+
+**4. Post and act.** Post the verdict as a PR comment (`gh pr comment <PR_NUMBER> --body-file <file>`): each promise with its evidence, every query with its result, the error comparison, the health responses and the screenshots (attached per Step 6's attachment policy). Copy it into the ship summary and the task handoff.
+- ✅ → done.
+- 🟡 → report what was not checked and ask the user (in Kandev, through the question tool). No revert PR.
+- 🔴 → open a revert PR: a branch from the updated base named per Step 2 and ending `-revert-<PR_NUMBER>`, `git revert --no-edit "$MERGE_SHA"` (a stack reverts every landed slice, newest first), then Steps 1 to 8 as for any PR. Never run Step 9 or this step on a revert PR and never merge it, whatever the merge policy says. Hand back with the evidence and the revert PR (in Kandev, through the question tool).
+
 ## Red Flags — STOP
 
 - About to push without a /verify verdict for this diff → back to Step 4; "tests pass" is not a verdict
@@ -352,6 +404,12 @@ When any condition fails, name it in the ship summary. In Kandev, ask the user t
 - PR already exists → push to existing PR, don't create a new one
 - A CI fix round leaves the same check failing with the same error → stop and report; don't spend the remaining rounds
 - About to queue auto-merge when the base branch's guide has no merge-policy line (including a PR that adds the line), or the base has no required checks → don't; hand the merge to the user
+- About to run Step 10 because the production-check line is in this checkout or in main after the merge → read it from `$MERGE_SHA^`; a PR never opts itself in
+- About to merge a revert PR, or run Step 9 on one → don't; the user decides on every revert
+- About to click a review-queue or admin action, or anything else the recipe's account rules forbid, as the production account → don't; that promise is 🟡 not checked
+- About to read production through `rails runner`, a console or SSH → use the recipe's read-only path; application code can send email, call APIs or enqueue jobs
+- A production ✅ for a UI promise without screenshots → it is not a ✅
+- Treating a cancelled main CI run as a failure → a newer commit superseded it; wait on that commit's deploy
 
 ## Arguments
 
@@ -361,7 +419,7 @@ $ARGUMENTS — Optional: commit message, ticket ID, or notes.
 - Matches a conventional commit prefix (`feat:`, `fix:`, etc.) → use as exact commit message
 - Matches a ticket pattern (e.g., `INT-107`, `COR-456`) → include as ticket reference
 - Empty → auto-detect commit type from the diff
-- Approved acceptance criteria (passed by E2E) → give them to /verify in Step 4; never use them as the commit message
+- Approved acceptance criteria (passed by E2E) → give them to /verify in Steps 4 and 10; never use them as the commit message
 - Anything else → treat as context for generating the commit message
 
 Examples:

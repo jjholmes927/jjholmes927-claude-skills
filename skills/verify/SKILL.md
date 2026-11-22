@@ -88,6 +88,17 @@ Write `$TOP/.verify/$TREE.json` when the overall verdict is ✅ or 🟡:
 
 Rules: a 🔴 verdict writes nothing (ship's loud 🔴 path stays the only way past). The `.verify/` exclude must be in place before the fingerprint is computed, or the record perturbs its own hash. The record is evidence, not the verdict — the pasted ✅/🟡/🔴 block in chat is still required.
 
+## Production target
+
+Ship Step 10 calls verify after a deploy with the repository's production check recipe (read from the base branch), the deployed SHA and the approved acceptance criteria. The recipe supplies every production fact; never substitute one it does not state.
+
+- **Promises:** write them as in Step 1, then keep only those observable in production: UI, data and errors. Mark the rest "covered pre-merge" (internal structure and behaviour the pre-merge verdict already proved). An observable promise this session cannot check (a missing tool or login, or an action the recipe's account rules forbid) is 🟡 naming the blocker. Never take a forbidden action to get evidence.
+- **UI:** through verify-ui at the recipe's URL with its documented login and account rules, at desktop and phone width, with screenshots.
+- **Data:** read-only queries through the read-only path the recipe names, each query shown with its result. Never an app console, runner or SSH session: application code can send email, call APIs or enqueue jobs.
+- **Errors and health:** the recipe's error check (error types new since the deploy, each with its route or stack) and its liveness and health checks, responses shown.
+
+Statuses change meaning here: 🔴 is a promise that fails in production, and anything not checked is 🟡. Head the report `Production check @ <deployed SHA>`; the deployed SHA replaces Step 6's fingerprint. Ship Step 10's verdict rules decide the overall verdict, including when verify runs by hand.
+
 ## Anti-patterns
 
 - "Tests pass, therefore it works"
@@ -99,7 +110,7 @@ Rules: a 🔴 verdict writes nothing (ship's loud 🔴 path stays the only way p
 
 ## Arguments
 
-$ARGUMENTS — Optional: approved acceptance criteria, or a hint of what changed (ticket, PR ref, or free text). Empty → use the acceptance criteria in `.e2e/handoff.md` when present, plus the current diff and recent commits.
+$ARGUMENTS — Optional: approved acceptance criteria, a hint of what changed (ticket, PR ref, or free text), or a production target (recipe, deployed SHA and criteria). Empty → use the acceptance criteria in `.e2e/handoff.md` when present, plus the current diff and recent commits.
 
 ## Checklist
 
@@ -110,3 +121,4 @@ $ARGUMENTS — Optional: approved acceptance criteria, or a hint of what changed
 - [ ] Environment repaired (tools installed/updated, server started) rather than verification downgraded
 - [ ] Report shows evidence per promise, or declares 🟡/🔴 with reason and follow-up plan — never silence
 - [ ] ✅/🟡 verdict recorded in `.verify/<tree>.json` against the working-tree fingerprint (Step 6)
+- [ ] Production target: only production-observable promises, read-only data reads, error and health checks, report stamped with the deployed SHA

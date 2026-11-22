@@ -1,6 +1,6 @@
 ---
 name: verify-ui
-description: UI arm of /verify — prove a UI change in a real browser with agent-browser. Owns target resolution (localhost or PR staging), the open→locate→act→verify→cleanup loop, and screenshots as evidence; no claim of UI correctness without one. Invoke directly for pure-UI checks — /verify routes here when the diff touches UI.
+description: UI arm of /verify — prove a UI change in a real browser with agent-browser. Owns target resolution (localhost, PR staging or production), the open→locate→act→verify→cleanup loop, and screenshots as evidence; no claim of UI correctness without one. Invoke directly for pure-UI checks — /verify routes here when the diff touches UI.
 ---
 
 # Verify UI
@@ -39,6 +39,7 @@ $ARGUMENTS — Optional: target URL, PR reference, or empty for auto-detect.
 
 ### Parsing rules
 - Full URL (`https://...`) → use as target directly
+- Production target (from /verify's production target) → the recipe's URL, with its documented login and account rules
 - PR reference (`#6715`, `6715`, `https://github.com/.../pull/6715`) → resolve staging URL from PR deployment
 - Empty → auto-detect (see Target Resolution)
 
@@ -109,7 +110,7 @@ Set `$TARGET_URL` to the resolved URL for all subsequent steps. Set `$IS_STAGING
 
 ## Five-Step Pattern: Open, Locate, Act, Verify, Cleanup
 
-**Staging timeout:** When verifying against staging, the entire verification flow has a 7-minute maximum. If exceeded, report what was completed so far and proceed to cleanup.
+**Live-target timeout:** Against staging or any other non-localhost target, the entire verification flow has a 7-minute maximum; a production check gets 15 minutes (login plus two widths per promise). If exceeded, report what was completed so far and proceed to cleanup.
 
 ### Step 1: Open
 
@@ -221,7 +222,7 @@ Don't rely on eyeballing screenshots for overflow — measure it:
 agent-browser eval "(() => { const el = document.querySelector('<changed-element>'); const box = el.closest('<its-container>'); return JSON.stringify({ bleeds: el.getBoundingClientRect().right > box.getBoundingClientRect().right + 0.5, docScrollW: document.documentElement.scrollWidth, viewport: window.innerWidth }) })()"
 ```
 
-`docScrollW > viewport` means the page scrolls horizontally — always a failure. Skip this step only for changes with no rendered output (analytics wiring, aria attributes, console messaging), and say so in the report.
+`docScrollW > viewport` means the page scrolls horizontally — always a failure. Skip this step only for changes with no rendered output (analytics wiring, aria attributes, console messaging), and say so in the report. A production check captures every UI promise at both widths.
 
 ### Step 5: Cleanup (MANDATORY)
 
@@ -237,9 +238,15 @@ agent-browser close
 ### Localhost
 Use the repository's documented development login. Do not assume localhost is unauthenticated. If required credentials are unavailable, report the unverified promise explicitly.
 
-### Staging (any non-localhost target)
+### Staging and production (any non-localhost target)
 
 All `agent-browser` commands MUST include `--session-name $SESSION_NAME` to persist auth cookies across runs.
+
+**Documented login first.** When the repository documents a login for this target (its production check recipe or its guide), use it instead of asking for a manual login, and follow its account rules: which account, and what it may touch. An action those rules forbid is never taken for evidence; report that promise as not checked. When the recipe defines them:
+- use your own session (the recipe's per-agent name replaces `$SESSION_NAME`) and load the shared saved login; log in again only when it has expired, one agent at a time, then save it for the others;
+- hold the recipe's write lock for any check that changes data, and restore what it changed.
+
+A documented login that cannot run here (a missing mail connector, say) leaves its promises not checked; name the step that failed.
 
 After opening the page, detect auth state:
 
@@ -247,7 +254,7 @@ After opening the page, detect auth state:
 2. Check for app elements (nav links like "Home", "Settings", "Sign out") → **authenticated**
 3. Check for login elements (text "Email", "Sign in", "Kinde", "Google", "Okta") → **not authenticated**
 
-If not authenticated:
+If not authenticated and the repository documents a login, run it as above. Without one:
 1. Report to the user:
    ```
    Staging session expired or not set up. Please log in manually:
