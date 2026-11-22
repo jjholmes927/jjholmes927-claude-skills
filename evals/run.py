@@ -64,6 +64,11 @@ GATE_SCHEMA = {
     "required": SCHEMA["required"] + list(GATE_FIELDS),
     "properties": {**SCHEMA["properties"], **GATE_FIELDS},
 }
+PROMISE_SCHEMA = {
+    **SCHEMA,
+    "required": SCHEMA["required"] + ["promises"],
+    "properties": {**SCHEMA["properties"], "promises": {"type": "array", "items": {"type": "string"}}},
+}
 BUDGETS = {"light": (800, 10), "full": (2000, 25)}
 WHAT = "> **What:**"
 WHY = "> **Why:**"
@@ -100,7 +105,7 @@ def prepare(case, directory, source_root):
         sources[relative] = hashlib.sha256(content).hexdigest()
     if case["kind"] == "gate":
         (workspace / "PLAN.md").write_text((FIXTURES / case["fixture"]).read_text())
-    elif case["kind"] != "decision":
+    elif case["kind"] not in ("decision", "promises"):
         comparison = "<" if case["defective"] else "<="
         (workspace / "REQUIREMENTS.md").write_text(REQUIREMENTS)
         (workspace / "pricing.py").write_text(
@@ -109,6 +114,10 @@ def prepare(case, directory, source_root):
             "        raise ValueError('weight must be positive')\n"
             f"    return 500 if weight_grams {comparison} 1000 else 750\n"
         )
+    for relative, text in case.get("files", {}).items():
+        path = workspace / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
     subprocess.run(["git", "init", "-q", str(workspace)], check=True)
     subprocess.run(["git", "-C", str(workspace), "add", "."], check=True)
     subprocess.run([
@@ -125,6 +134,7 @@ def prepare(case, directory, source_root):
         "to execute their external commands. "
         "For decision cases, decide the next stage action only; make no changes. "
         + ("For gate cases, return the gate only; make no changes. " if case["kind"] == "gate" else "")
+        + ("For promise cases, return the promises only; make no changes. " if case["kind"] == "promises" else "")
         + "Use the supplied workflow documents, with the task's explicit constraints taking precedence. "
         "Do not claim to have run tools you did not run. Return only JSON matching this schema:\n"
         + json.dumps(schema_for(case))
@@ -141,7 +151,7 @@ def prepare(case, directory, source_root):
 
 
 def schema_for(case):
-    return GATE_SCHEMA if case["kind"] == "gate" else SCHEMA
+    return {"gate": GATE_SCHEMA, "promises": PROMISE_SCHEMA}.get(case["kind"], SCHEMA)
 
 
 def valid_response(response, schema=SCHEMA):
@@ -152,6 +162,11 @@ def valid_response(response, schema=SCHEMA):
     if response["target_url"] is not None and not isinstance(response["target_url"], str):
         return False
     if schema is GATE_SCHEMA and not valid_gate(response):
+        return False
+    if schema is PROMISE_SCHEMA and not (
+        isinstance(response["promises"], list)
+        and all(isinstance(p, str) and p.strip() for p in response["promises"])
+    ):
         return False
     if not isinstance(response["findings"], list):
         return False
@@ -326,6 +341,14 @@ def grade(case, directory):
         checks["action"] = response["action"] == case["expected_action"]
         if "expected_url" in case:
             checks["target"] = response["target_url"] == case["expected_url"]
+    elif case["kind"] == "promises":
+        checks["action"] = response["action"] == case["expected_action"]
+        promises = [p.lower() for p in response["promises"]]
+        checks["covers"] = all(
+            any(all(term.lower() in p for term in group) for p in promises)
+            for group in case.get("expected_terms", [])
+        )
+        checks["excludes"] = not any(term.lower() in p for term in case.get("forbidden_terms", []) for p in promises)
     elif case["kind"] == "review":
         checks["action"] = response["action"] == "reviewed"
         findings = response["findings"]

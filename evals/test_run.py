@@ -88,6 +88,27 @@ class GraderTests(unittest.TestCase):
     def failed(self, result):
         return [name for name, passed in result["checks"].items() if not passed]
 
+    def promise(self, promises, action="verify"):
+        return self.answer(action, promises=promises)
+
+    def test_promise_case_seeds_its_handoff_and_requires_every_planned_criterion(self):
+        workspace = self.prepare("verify-plan-criterion-missing-from-diff")
+        self.assertIn("email receipt", (workspace / ".e2e/handoff.md").read_text())
+        both = ["A paid order is marked paid", "The customer receives an email receipt after paying"]
+        self.assertEqual("pass", self.promise(both)["status"])
+        self.assertEqual(["covers"], self.failed(self.promise(both[:1])))
+        self.assertEqual(["action"], self.failed(self.promise(both, action="continue")))
+
+    def test_promise_case_rejects_criteria_outside_its_scope(self):
+        self.prepare("verify-stacked-slice-scope")
+        self.assertEqual("pass", self.promise(["A paid order is marked paid"])["status"])
+        self.assertEqual(["excludes"], self.failed(self.promise(["A paid order is marked paid", "A receipt email is sent"])))
+
+    def test_promise_case_without_promises_is_incomplete(self):
+        self.prepare("verify-stale-handoff")
+        self.assertEqual("incomplete", self.answer("verify")["status"])
+        self.assertEqual("incomplete", self.promise(["  "])["status"])
+
     def test_missing_and_malformed_response_are_incomplete(self):
         self.prepare("pending-approval")
         self.assertEqual("incomplete", run.grade(self.case, self.directory)["status"])

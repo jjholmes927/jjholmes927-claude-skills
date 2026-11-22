@@ -1,11 +1,11 @@
 ---
 name: ship
-description: End-to-end PR workflow — format, commit, verify behaviour with evidence (always, via /verify), push, open the PR, watch CI fail-fast, then consolidate Bugbot and AI-review feedback. Use when work is ready to become a pull request, or the user asks to ship it.
+description: End-to-end PR workflow — format, commit, verify behaviour with evidence (always, via /verify), push, open the PR, watch CI fail-fast, consolidate Bugbot and AI-review feedback, then land the PR where the repository opts into agent merges. Use when work is ready to become a pull request, or the user asks to ship it.
 ---
 
 # Ship
 
-End-to-end workflow: format, branch, commit, verify with evidence, push, PR, fail-fast CI watch, consolidate review feedback.
+End-to-end workflow: format, branch, commit, verify with evidence, push, PR, fail-fast CI watch, consolidate review feedback, land on green where the repository opts in.
 
 ## Workflow
 
@@ -19,6 +19,8 @@ Preflight → Format → Stage → Branch (if on main) → Commit → Verify (AL
                          Consolidate reviews   Fix fast + push
                          (Bugbot + AI review)   └──→ Watch CI
                          fix valid → push
+                                    │
+                    Land on green (opt-in repos only)
                                     │
                                   Done
 ```
@@ -106,6 +108,8 @@ Format: `prefix: Imperative description`
 ## Step 4: Verify (ALWAYS — evidence-based, never silently skipped)
 
 Every ship verifies behaviour before push — UI or not. Invoke **/verify**: it writes the promise, picks the evidence per change type (UI → verify-ui, telemetry → read-back, API/job → real invocation), and reports ✅/🟡/🔴 with the evidence shown. "Tests pass" is not verification.
+
+When the caller supplies approved acceptance criteria (E2E passes them from `.e2e/handoff.md`), give them to /verify so its promises come from the approved plan, not only the diff.
 
 Collect configured lint advisories with `python3 -B
 ${CLAUDE_PLUGIN_ROOT}/skills/e2e/scripts/advisory_review.py scan "$BASE"
@@ -228,7 +232,7 @@ PR_NUMBER=$(gh pr view --json number -q .number)
 
 ## Step 7: Watch CI (fail fast)
 
-Watch all checks and bail the instant one fails. Do NOT use `--required`: none of our repos configure branch-protection required checks, so `--required` returns "no required checks reported" and the watch silently no-ops — this failed in every repo it was tried in. Wait for checks to register first, or `--watch` hits a "no checks yet" race right after PR creation, returns non-zero, and falsely trips the fix loop:
+Watch all checks and bail the instant one fails. Do NOT use `--required`: most of our repos configure no branch-protection required checks, so `--required` returns "no required checks reported" and the watch silently no-ops — this failed in every such repo it was tried in. Wait for checks to register first, or `--watch` hits a "no checks yet" race right after PR creation, returns non-zero, and falsely trips the fix loop:
 
 ```bash
 for i in $(seq 1 12); do
@@ -248,7 +252,7 @@ If the repo has no CI at all (zero checks after the registration poll), say so i
      - RSpec → use `.claude/skills/fetching-ci-errors/fetch_ci_errors` if present.
      - ESLint / TypeScript / Prettier / other → find the failed run, then view its log: `gh pr checks <PR_NUMBER> --json name,bucket,link --jq '.[]|select(.bucket=="fail").link'`, then `gh run view <run-id> --log-failed` (run-id from that link).
   3. Fix locally, run affected tests, commit (new commit, NOT amend), re-run Step 4 for changed behaviour and Step 6's fingerprint/size gates, then push.
-  4. Re-run the watch. **Max 3 fix rounds**, then stop and report.
+  4. Re-run the watch. **Stop as soon as a round makes no progress** (the same check fails with the same error after your fix), and never run more than 3 fix rounds. The stop report lists each round in one line (what failed, what you changed) and ends with the one question the user must answer to unblock it.
 
 Ship owns this CI repair budget for the entire invocation, including returns from review feedback. Record attempts in the task handoff (or `.e2e/sessions.tsv` when E2E owns the task), preserve the count on resume, and do not restart it in the caller. A parent workflow's stricter failure stop still applies.
 
@@ -286,6 +290,52 @@ Inspect the repository's configured review automation. Where present, the `AI co
 
 4. After fixing, re-watch CI (Step 7). The CI review re-runs on the new push and refreshes its sticky comment; re-collect once more if you pushed fixes. **Cap at 2 review rounds** — don't chase every bot re-scan (diminishing returns).
 
+## Step 9: Land on green (opt-in repositories only)
+
+Merging deploys in many repositories, so landing is opt-in per repository. Leave the merge to the user unless **every** condition holds:
+
+1. The repository guide **on the base branch** contains the line `**Merge policy: agents merge their own PRs once required checks pass.**` Never read it from this checkout: a PR that adds the line must not be able to merge itself.
+   ```bash
+   git fetch -q origin "$PR_BASE_BRANCH"
+   for f in CLAUDE.md AGENTS.md; do git show "origin/$PR_BASE_BRANCH:$f" 2>/dev/null; done \
+     | grep -qF '**Merge policy: agents merge their own PRs once required checks pass.**' && echo "opted in" || echo "NOT opted in"
+   ```
+2. The base branch requires status checks, through branch protection or a ruleset. Output that is not a number (an error body, a 404) counts as 0:
+   ```bash
+   classic=$(gh api "repos/{owner}/{repo}/branches/$PR_BASE_BRANCH/protection/required_status_checks" --jq '.checks | length' 2>/dev/null)
+   rules=$(gh api "repos/{owner}/{repo}/rules/branches/$PR_BASE_BRANCH" --jq '[.[] | select(.type == "required_status_checks")] | length' 2>/dev/null)
+   case "$classic" in ''|*[!0-9]*) classic=0;; esac
+   case "$rules" in ''|*[!0-9]*) rules=0;; esac
+   [ $((classic + rules)) -gt 0 ] && echo "required checks present" || echo "NO REQUIRED CHECKS"
+   ```
+3. The PR's base is the repository's default branch (stacked PRs: see below).
+4. The /verify verdict for the pushed tree is ✅ for every promise.
+5. Steps 7 and 8 ended green on this PR's head, every configured review bot has posted on this PR (an intermediate stack PR waits for them here, because Step 8 skipped that wait), no P1/P2 finding is unresolved, and the PR is not a draft.
+
+When all hold, queue the merge pinned to the verified head. If the command fails (for example, the repository has auto-merge switched off), hand back; never retry with `--admin` or without `--auto`:
+
+```bash
+gh pr merge <PR_NUMBER> --auto --squash --match-head-commit "$(git rev-parse HEAD)" || echo "AUTO-MERGE NOT QUEUED"
+```
+
+Then poll until the PR merges, closes or fails a required check. One poll call stays under eight minutes; repeat it up to four times (about 30 minutes in all), or run it in the background where the harness supports that:
+
+```bash
+for i in $(seq 1 24); do
+  state=$(gh pr view <PR_NUMBER> --json state --jq .state)
+  failed=$(gh pr checks <PR_NUMBER> --required --json bucket --jq 'any(.[]; .bucket == "fail")' 2>/dev/null)
+  { [ "$state" != "OPEN" ] || [ "$failed" = "true" ]; } && break
+  sleep 20
+done
+gh pr view <PR_NUMBER> --json state,mergeCommit --jq '"\(.state) \(.mergeCommit.oid)"'
+```
+
+MERGED: record the merge commit SHA in the ship summary and the task handoff. Anything else after 30 minutes (still open, closed, or a failed required check): leave auto-merge queued, report the state and hand back.
+
+**Stacks land bottom-up, in the same ship run.** Run this step for the bottom PR first. A child PR whose base is another feature branch fails condition 3 only for now: wait here for its parent's result rather than handing back. When the parent merges, GitHub retargets the child to the default branch only if the repository deletes head branches on merge (`gh api repos/{owner}/{repo} --jq .delete_branch_on_merge`). Once it is retargeted, rebase the child onto the default branch if GitHub reports it behind or conflicting, re-run Step 4 and the Step 6 gates for any change, push, re-watch CI, then run this step for it. Hand back if the parent hands back, or if the child is not retargeted within five minutes of the parent merging.
+
+When any condition fails, name it in the ship summary. In Kandev, ask the user to merge through the question tool and include that reason.
+
 ## Red Flags — STOP
 
 - About to push without a /verify verdict for this diff → back to Step 4; "tests pass" is not a verdict
@@ -300,7 +350,8 @@ Inspect the repository's configured review automation. Where present, the `AI co
 - About to force-push → ask user for confirmation
 - No changes detected → do not create empty commits
 - PR already exists → push to existing PR, don't create a new one
-- 3+ CI fix iterations with no progress → stop and report
+- A CI fix round leaves the same check failing with the same error → stop and report; don't spend the remaining rounds
+- About to queue auto-merge when the base branch's guide has no merge-policy line (including a PR that adds the line), or the base has no required checks → don't; hand the merge to the user
 
 ## Arguments
 
@@ -310,6 +361,7 @@ $ARGUMENTS — Optional: commit message, ticket ID, or notes.
 - Matches a conventional commit prefix (`feat:`, `fix:`, etc.) → use as exact commit message
 - Matches a ticket pattern (e.g., `INT-107`, `COR-456`) → include as ticket reference
 - Empty → auto-detect commit type from the diff
+- Approved acceptance criteria (passed by E2E) → give them to /verify in Step 4; never use them as the commit message
 - Anything else → treat as context for generating the commit message
 
 Examples:
