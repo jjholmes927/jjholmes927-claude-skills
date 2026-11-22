@@ -14,6 +14,7 @@ import run
 
 CACHE = Path(os.environ.get("SKILL_EVAL_CACHE", Path.home() / ".cache" / "skill-evals"))
 DROP = 2
+STAMP = "eval-stamp:"
 
 
 def skill_dirs(case):
@@ -25,15 +26,27 @@ def covering(cases, changed):
             and any(path.startswith(d) for d in skill_dirs(c) for path in changed)]
 
 
+def hash_folders(digest, root, folders):
+    for folder in sorted(folders):
+        for path in sorted((root / folder).rglob("*")):
+            if path.is_file():
+                digest.update(str(path.relative_to(root)).encode() + b"\0" + path.read_bytes() + b"\0")
+
+
 def cache_key(case, root, model, runs):
     digest = hashlib.sha256()
     digest.update(json.dumps({"spec": plugin_eval.spec(case), "files": plugin_eval.files(case),
                               "model": model, "runs": runs}, sort_keys=True).encode())
-    for folder in sorted(skill_dirs(case)):
-        for path in sorted((root / folder).rglob("*")):
-            if path.is_file():
-                digest.update(str(path.relative_to(root)).encode() + b"\0" + path.read_bytes() + b"\0")
+    hash_folders(digest, root, skill_dirs(case))
     return digest.hexdigest()
+
+
+def stamp(cases, root):
+    digest = hashlib.sha256()
+    for case in sorted(cases, key=lambda c: c["id"]):
+        digest.update(json.dumps(plugin_eval.spec(case), sort_keys=True).encode())
+    hash_folders(digest, root, set().union(*(skill_dirs(c) for c in cases)))
+    return digest.hexdigest()[:16]
 
 
 def parse(report):
@@ -128,6 +141,9 @@ def main(argv=None):
     with base_checkout(args.base, run.ROOT) as base:
         rows = compare(cases, base, run.ROOT, args.model, args.runs, args.concurrency, CACHE)
     print(table(rows))
+    clean = not any(r["drop"] or r["before"] is None or r["after"] is None for r in rows)
+    if clean and not args.case:
+        print(f"\nPaste this line into the PR body:\n{STAMP} {stamp(cases, run.ROOT)}")
     return 1 if any(r["drop"] for r in rows) else 0
 
 

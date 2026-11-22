@@ -1,3 +1,4 @@
+import io
 import json
 from pathlib import Path
 import shutil
@@ -5,6 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import check_stamp
 import compare
 import run
 
@@ -145,6 +147,73 @@ class MainTests(unittest.TestCase):
                 patch.object(compare, "compare", return_value=[row]):
             base.return_value.__enter__.return_value = Path("/tmp/base")
             self.assertEqual(1, compare.main(["origin/master", "--model", "opus", "--case", "land-opted-in-green"]))
+
+
+class StampTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = checkout(Path(self.tmp.name), {"skills/ship/SKILL.md": "rules", "skills/verify/SKILL.md": "v"})
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_stamp_follows_skill_text_and_cases_but_not_order(self):
+        stamp = compare.stamp([SHIP, VERIFY], self.root)
+        self.assertRegex(stamp, r"^[0-9a-f]{16}$")
+        self.assertEqual(stamp, compare.stamp([VERIFY, SHIP], self.root))
+        self.assertNotEqual(stamp, compare.stamp([SHIP], self.root))
+        self.assertNotEqual(stamp, compare.stamp([SHIP, {**VERIFY, "expected_verdict": "fail"}], self.root))
+        (self.root / "skills/ship/SKILL.md").write_text("changed")
+        self.assertNotEqual(stamp, compare.stamp([SHIP, VERIFY], self.root))
+
+    def test_main_prints_the_stamp_only_when_clean(self):
+        clean = {"case": "ship-case", "before": 3, "after": 3, "runs": 3, "drop": False}
+        for rows, expected in (([clean], True), ([{**clean, "after": 0, "drop": True}], False),
+                               ([{**clean, "after": None}], False)):
+            with self.subTest(rows=rows), \
+                    patch.object(compare, "changed_files", return_value={"skills/ship/SKILL.md"}), \
+                    patch.object(compare, "base_checkout") as base, \
+                    patch.object(compare, "compare", return_value=rows), \
+                    patch("sys.stdout", new_callable=io.StringIO) as out:
+                base.return_value.__enter__.return_value = Path("/tmp/base")
+                compare.main(["origin/master", "--model", "opus"])
+            self.assertEqual(expected, compare.STAMP in out.getvalue())
+
+    def test_a_filtered_run_prints_no_stamp(self):
+        clean = {"case": "land-opted-in-green", "before": 3, "after": 3, "runs": 3, "drop": False}
+        with patch.object(compare, "changed_files", return_value={"skills/ship/SKILL.md"}), \
+                patch.object(compare, "base_checkout") as base, \
+                patch.object(compare, "compare", return_value=[clean]), \
+                patch("sys.stdout", new_callable=io.StringIO) as out:
+            base.return_value.__enter__.return_value = Path("/tmp/base")
+            compare.main(["origin/master", "--model", "opus", "--case", "land-opted-in-green"])
+        self.assertNotIn(compare.STAMP, out.getvalue())
+
+
+class CheckTests(unittest.TestCase):
+    def check(self, changed, body):
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as handle:
+            handle.write(body)
+        with patch.object(compare, "changed_files", return_value=changed), \
+                patch.object(compare, "stamp", return_value="0123456789abcdef"), \
+                patch("sys.stdout", new_callable=io.StringIO) as out:
+            code = check_stamp.main(["origin/master", handle.name])
+        Path(handle.name).unlink()
+        return code, out.getvalue()
+
+    def test_no_covered_change_passes_without_a_stamp(self):
+        self.assertEqual(0, self.check({"README.md", "skills/brief/SKILL.md"}, "")[0])
+
+    def test_matching_stamp_passes(self):
+        self.assertEqual(0, self.check({"skills/ship/SKILL.md"}, "**What**\n...\neval-stamp: 0123456789abcdef\n")[0])
+
+    def test_missing_or_stale_stamp_fails_and_says_what_to_run(self):
+        for body, word in (("**What**\nno stamp", "no"), ("eval-stamp: ffffffffffffffff", "a stale")):
+            with self.subTest(body=body):
+                code, out = self.check({"skills/ship/SKILL.md"}, body)
+                self.assertEqual(1, code)
+                self.assertIn(f"has {word} eval stamp", out)
+                self.assertIn("evals/compare.py origin/master", out)
 
 
 if __name__ == "__main__":
