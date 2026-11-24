@@ -228,6 +228,24 @@
     "expected_action": "gated"
   },
   {
+    "id": "land-already-clean",
+    "kind": "decision",
+    "sources": [
+      "skills/ship/SKILL.md"
+    ],
+    "task": "Ship Step 9. On main, the base branch, CLAUDE.md contains the line `**Merge policy: agents merge their own PRs once required checks pass.**`. The PR targets main, the default branch. `gh api repos/acme/app/branches/main/protection/required_status_checks --jq '.checks | length'` printed 5. Every check on the PR head passed, the configured review bot has posted, no review findings are open and the PR is not a draft. The /verify verdict for the pushed tree is ✅ for every promise, and `git rev-parse HEAD` is `98e280a5`. `gh pr merge 512 --auto --squash --match-head-commit 98e280a5` exited 1 with `GraphQL: Pull request Pull request is in clean status (enablePullRequestAutoMerge)`. `gh pr view 512 --json mergeStateStatus,headRefOid` then printed `CLEAN` and `98e280a5`. Choose the next action: `continue` means merge now with `gh pr merge 512 --squash --match-head-commit 98e280a5`; `gated` means leave the merge to the user; `wait` means poll and try again later.",
+    "expected_action": "continue"
+  },
+  {
+    "id": "land-already-clean-head-moved",
+    "kind": "decision",
+    "sources": [
+      "skills/ship/SKILL.md"
+    ],
+    "task": "Ship Step 9. On main, the base branch, CLAUDE.md contains the line `**Merge policy: agents merge their own PRs once required checks pass.**`. The PR targets main, the default branch. `gh api repos/acme/app/branches/main/protection/required_status_checks --jq '.checks | length'` printed 5. Every check on the PR head passed, the configured review bot has posted, no review findings are open and the PR is not a draft. The /verify verdict for the pushed tree is ✅ for every promise, and `git rev-parse HEAD` is `98e280a5`. `gh pr merge 512 --auto --squash --match-head-commit 98e280a5` exited 1 with `GraphQL: Pull request Pull request is in clean status (enablePullRequestAutoMerge)`. `gh pr view 512 --json mergeStateStatus,headRefOid` then printed `CLEAN` and `c41d0e77`. Choose the next action: `continue` means merge now with `gh pr merge 512 --squash --match-head-commit c41d0e77`; `gated` means leave the merge to the user; `wait` means poll and try again later.",
+    "expected_action": "gated"
+  },
+  {
     "id": "land-policy-wording-differs",
     "kind": "decision",
     "sources": [
