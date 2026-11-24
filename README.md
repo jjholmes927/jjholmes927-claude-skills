@@ -117,7 +117,7 @@ Contributions welcome! To add a new skill:
 
 ## Workflow evaluations
 
-`evals/cases.json` holds 52 cases: stage decisions and production verdicts
+`evals/cases.json` holds 54 cases: stage decisions and production verdicts
 graded on exact answers, promise lists, two `/e2e` plan gates, paired
 defective/correct code reviews, and a small implementation checked by
 independent behavioural assertions. Python 3 and Git are the only dependencies

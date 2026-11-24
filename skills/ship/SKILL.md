@@ -314,11 +314,29 @@ Merging deploys in many repositories, so landing is opt-in per repository. Leave
 4. The /verify verdict for the pushed tree is ✅ for every promise, or `checked after deploy` where Step 4 found the production-check line.
 5. Steps 7 and 8 ended green on this PR's head, every configured review bot has posted on this PR (an intermediate stack PR waits for them here, because Step 8 skipped that wait), no P1/P2 finding is unresolved, and the PR is not a draft.
 
-When all hold, queue the merge pinned to the verified head. If the command fails (for example, the repository has auto-merge switched off), hand back; never retry with `--admin` or without `--auto`:
+When all hold, queue the merge pinned to the verified head:
 
 ```bash
 gh pr merge <PR_NUMBER> --auto --squash --match-head-commit "$(git rev-parse HEAD)" || echo "AUTO-MERGE NOT QUEUED"
 ```
+
+If it fails because the pull request `is in clean status`, GitHub has nothing left to wait for: every requirement already passes, so it won't queue. Re-read the PR, and merge now only when it is `CLEAN` on the verified head. GitHub can answer `UNKNOWN` for a few seconds while it recomputes:
+
+```bash
+HEAD_SHA=$(git rev-parse HEAD)
+for i in 1 2 3 4 5 6; do
+  STATE=$(gh pr view <PR_NUMBER> --json mergeStateStatus,headRefOid --jq '"\(.mergeStateStatus) \(.headRefOid)"')
+  [ "${STATE%% *}" != "UNKNOWN" ] && break
+  sleep 5
+done
+if [ "$STATE" = "CLEAN $HEAD_SHA" ]; then
+  gh pr merge <PR_NUMBER> --squash --match-head-commit "$HEAD_SHA" || echo "MERGE FAILED"
+else
+  echo "NOT MERGED: $STATE"
+fi
+```
+
+`MERGE FAILED` or `NOT MERGED` → hand back. Any other failure to queue (for example, the repository has auto-merge switched off) → hand back without retrying: never with `--admin`, never without `--auto`.
 
 Then poll until the PR merges, closes or fails a required check. One poll call stays under eight minutes; repeat it up to four times (about 30 minutes in all), or run it in the background where the harness supports that:
 
