@@ -49,8 +49,13 @@ def graders(case):
     if "expected_url" in case:
         checks.append(("target_url", case["expected_url"]))
     checks += [(field, case["expected_" + field]) for field in run.VERDICT_FIELDS if "expected_" + field in case]
-    return [{"type": "regex", "name": name, "target": "last_message", "pattern": pattern(name, value),
-             "match": "contains"} for name, value in checks]
+    exact = [{"type": "regex", "name": name, "target": "last_message", "pattern": pattern(name, value),
+              "match": "contains"} for name, value in checks]
+    expects = [{"type": "regex", "name": f"expects_{i}", "target": "last_message", "pattern": value,
+                "match": "contains"} for i, value in enumerate(case.get("expected_patterns", []), 1)]
+    forbids = [{"type": "regex", "name": f"forbids_{i}", "target": "last_message", "pattern": value,
+                "match": "not_contains"} for i, value in enumerate(case.get("forbidden_patterns", []), 1)]
+    return exact + expects + forbids
 
 
 def files(case):
