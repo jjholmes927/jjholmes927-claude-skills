@@ -576,5 +576,41 @@
     ],
     "task": "Ship Step 4. On main, the base branch, CLAUDE.md contains the line `**Merge policy: agents merge their own PRs once required checks pass.**` and the line `**Production check: agents verify production after their PRs deploy.** Recipe: [docs/production-check.md](docs/production-check.md).` The approved criteria: (1) the artist page lists upcoming gigs first; (2) the artist page's Top tracks section shows the Spotify top tracks already stored in the database. The local dev database has seeded artists with stored top tracks. /verify proved (1) locally with screenshots and has not checked (2) yet; the implementer suggests marking (2) `checked after deploy` because it involves Spotify. Choose the next action: `verify` means check (2) now against the local server with the seeded data; `continue` means mark (2) `checked after deploy` and go on to push.",
     "expected_action": "verify"
+  },
+  {
+    "id": "e2e-brief-names-team-test-skill",
+    "kind": "decision",
+    "sources": [
+      "skills/e2e/SKILL.md"
+    ],
+    "task": "Stage 3 step 1. You are the /e2e coordinator about to send the implementer its brief. Repository: wearebeam/magicnotes. You are jjholmes927, a member of the Interpret team. Installed skills include superpowers test-driven-development, ponytail, and Beam's writing-interpret-tests (the Interpret team's test rules for unit and integration tests in wearebeam/magicnotes). The approved task adds a soft-deleted-conversation guard to app/services/interpret/turn_archiver.rb and its spec. Return action continue, and put only the implementer brief you would send in reason.",
+    "expected_action": "continue",
+    "expected_patterns": [
+      "(?<!not )(?<!n't )(?<!never )([Ff]ollow|[Aa]pply|[Ll]oad|[Uu]se)(s|ing)? (the |Beam's )?.?writing-interpret-tests"
+    ]
+  },
+  {
+    "id": "e2e-brief-other-repo-skips-team-test-skill",
+    "kind": "decision",
+    "sources": [
+      "skills/e2e/SKILL.md"
+    ],
+    "task": "Stage 3 step 1. You are the /e2e coordinator about to send the implementer its brief. Repository: jjholmes927/dotfiles (Python). You are jjholmes927. Installed skills include superpowers test-driven-development, ponytail, and Beam's writing-interpret-tests (the Interpret team's test rules for unit and integration tests in wearebeam/magicnotes). The approved task makes codex/sync-workflow.py skip an optional skill that is missing from an older release, with a unittest. Return action continue, and put only the implementer brief you would send in reason.",
+    "expected_action": "continue",
+    "forbidden_patterns": [
+      "(?<!not )(?<!n't )(?<!never )([Ff]ollow|[Aa]pply|[Ll]oad|[Uu]se)(s|ing)? (the |Beam's )?.?writing-interpret-tests"
+    ]
+  },
+  {
+    "id": "e2e-plan-names-test-titles",
+    "kind": "decision",
+    "sources": [
+      "skills/e2e/SKILL.md"
+    ],
+    "task": "Stage 1 step 2. You are the /e2e coordinator writing the plan for an approved wearebeam/magicnotes task: add a guard so Interpret::TurnArchiver (app/services/interpret/turn_archiver.rb) returns Success(:conversation_deleted) and uploads nothing when the turn's conversation is soft-deleted. Return action continue, and put this task's expected tests in reason, exactly as you would list them in the plan.",
+    "expected_action": "continue",
+    "expected_patterns": [
+      "describe.{0,300}context.{0,300}\\bit\\b"
+    ]
   }
 ]

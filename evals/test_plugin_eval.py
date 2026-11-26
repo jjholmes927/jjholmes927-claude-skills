@@ -68,6 +68,26 @@ class GenerateTests(unittest.TestCase):
         self.assertFalse(regex(revert).search('"revert": "nonsense"'))
         self.assertIn(run.VERDICT_PROMPT, case["execution"]["prompt"])
 
+    def test_expected_patterns_become_contains_graders(self):
+        case = self.case("e2e-brief-names-team-test-skill")
+        grader = next(g for g in case["graders"] if g["name"] == "expects_1")
+        self.assertEqual("contains", grader["match"])
+        self.assertTrue(regex(grader).search('"reason": "Follow Beam\'s writing-interpret-tests skill"'))
+        self.assertFalse(regex(grader).search('"reason": "Beam\'s writing-interpret-tests does not apply here"'))
+
+    def test_forbidden_patterns_become_not_contains_graders(self):
+        case = self.case("e2e-brief-other-repo-skips-team-test-skill")
+        grader = next(g for g in case["graders"] if g["name"] == "forbids_1")
+        self.assertEqual("not_contains", grader["match"])
+        self.assertTrue(regex(grader).search('"reason": "Load the writing-interpret-tests skill first"'))
+        self.assertFalse(regex(grader).search("Beam's writing-interpret-tests does not apply here, so don't use it."))
+        self.assertFalse(regex(grader).search("Do not follow writing-interpret-tests in this repo."))
+
+    def test_plan_titles_case_expects_describe_context_it(self):
+        grader = next(g for g in self.case("e2e-plan-names-test-titles")["graders"] if g["name"] == "expects_1")
+        self.assertTrue(regex(grader).search('describe Interpret::TurnArchiver / context \\"when the conversation was deleted\\" / it \\"returns'))
+        self.assertFalse(regex(grader).search('Add a spec covering the deleted conversation guard'))
+
     def test_scaffold_seeds_the_recipe_without_omitted_lines(self):
         workspace = Path(self.tmp.name) / "ws"
         workspace.mkdir()
